@@ -155,6 +155,7 @@ class Plugin extends BasePlugin
                 'currentKey' => $currentKey,
                 'hasApiKey' => $hasApiKey,
                 'settingsUrl' => $settingsUrl,
+                'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
             ]);
             $event->html = preg_replace('/<fieldset>/', $row . '<fieldset>', $event->html, 1);
         });

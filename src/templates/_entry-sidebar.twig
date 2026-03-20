@@ -1,6 +1,8 @@
+{% if isLive or shortLink %}
 <fieldset>
     <legend class="h6">{{ 'Short Link' | t('_dub') }}</legend>
     <div class="meta">
+        {% if isLive %}
         <div class="field">
             <div class="heading">{{ 'Slug' | t('_dub') }}</div>
             <div class="input">
@@ -11,6 +13,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
         {% if shortLink %}
             <div class="field">
                 <div class="heading">{{ 'Link' | t('_dub') }}</div>
@@ -35,3 +38,4 @@
         {% endif %}
     </div>
 </fieldset>
+{% endif %}
