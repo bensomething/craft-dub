@@ -125,6 +125,7 @@ class Plugin extends BasePlugin
             /** @var Entry $entry */
             $entry = $event->sender;
             if ($entry->dateDeleted === null) {
+                Plugin::getInstance()->dub->deactivateLink($entry);
                 return;
             }
             Plugin::getInstance()->dub->deleteLink($entry);
