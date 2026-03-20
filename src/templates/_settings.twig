@@ -1,0 +1,33 @@
+{# @var plugin \bensomething\craftdub\Plugin #}
+{# @var settings \bensomething\craftdub\models\Settings #}
+{%- import '_includes/forms.twig' as forms -%}
+<style>#settings-apiKey-field { margin-top: 0; }</style>
+{{ forms.autosuggestField({
+    label: 'API Key' | t('_dub'),
+    id: 'apiKey',
+    name: 'apiKey',
+    value: settings.apiKey,
+    suggestEnvVars: true,
+    required: true,
+    instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('_dub'),
+}) }}
+
+{% if domains %}
+    {% set domainOptions = [] %}
+    {% for domain in domains %}
+        {% set domainOptions = domainOptions | merge([{ label: domain.slug, value: domain.slug }]) %}
+    {% endfor %}
+    {{ forms.selectField({
+        label: 'Domain' | t('_dub'),
+        id: 'domain',
+        name: 'domain',
+        value: settings.domain,
+        options: domainOptions,
+        instructions: 'Select the short link domain to use.' | t('_dub'),
+    }) }}
+{% else %}
+    {{ forms.field({
+        label: 'Domain' | t('_dub'),
+        instructions: 'Select the short link domain to use.' | t('_dub'),
+    }, '<p class="warning">' ~ 'Save your API key first to load available domains.' | t('_dub') ~ '</p>') }}
+{% endif %}
