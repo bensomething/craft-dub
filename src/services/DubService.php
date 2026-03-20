@@ -46,7 +46,7 @@ class DubService extends Component
         }
 
         // Try to update existing link; create if not found
-        $result = $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, array_merge(['url' => $url], $optionals));
+        $result = $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, array_merge(['url' => $url, 'active' => true], $optionals));
 
         if ($result === null) {
             if ($this->lastError) {
@@ -75,6 +75,14 @@ class DubService extends Component
         }
 
         $this->pendingLink = null;
+    }
+
+    public function deactivateLink(Entry $entry): void
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        if (Craft::parseEnv($settings->apiKey)) {
+            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, ['active' => false]);
+        }
     }
 
     public function deleteLink(Entry $entry): void

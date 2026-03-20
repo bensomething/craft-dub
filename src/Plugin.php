@@ -117,7 +117,7 @@ class Plugin extends BasePlugin
             if ($entry->getStatus() === Entry::STATUS_LIVE) {
                 Plugin::getInstance()->dub->commitLink($entry->id);
             } else {
-                Plugin::getInstance()->dub->deleteLink($entry);
+                Plugin::getInstance()->dub->deactivateLink($entry);
             }
         });
 
