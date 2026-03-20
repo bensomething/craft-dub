@@ -124,6 +124,9 @@ class Plugin extends BasePlugin
         Event::on(Entry::class, Element::EVENT_AFTER_DELETE, function(Event $event) {
             /** @var Entry $entry */
             $entry = $event->sender;
+            if ($entry->dateDeleted === null) {
+                return;
+            }
             Plugin::getInstance()->dub->deleteLink($entry);
         });
 
