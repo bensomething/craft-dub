@@ -17,7 +17,7 @@ composer require bensomething/craft-dub
 Then install the plugin via the Craft control panel under **Settings → Plugins**, or from the terminal:
 
 ```
-php craft plugin/install _dub
+php craft plugin/install dub
 ```
 
 ## Configuration

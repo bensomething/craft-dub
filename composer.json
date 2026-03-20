@@ -17,7 +17,7 @@
     }
   },
   "extra": {
-    "handle": "_dub",
+    "handle": "dub",
     "name": "Dub",
     "developer": "Ben Smith",
     "documentationUrl": "https://github.com/bensomething/craft-dub"

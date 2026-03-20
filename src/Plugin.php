@@ -56,7 +56,7 @@ class Plugin extends BasePlugin
             $domains = $this->dub->getDomains();
         }
 
-        return Craft::$app->view->renderTemplate('_dub/_settings.twig', [
+        return Craft::$app->view->renderTemplate('dub/_settings.twig', [
             'plugin' => $this,
             'settings' => $settings,
             'domains' => $domains,
@@ -92,7 +92,7 @@ class Plugin extends BasePlugin
             if ($customKey !== null || $hasExistingLink) {
                 $error = Plugin::getInstance()->dub->prepareLink($entry, $customKey);
                 if ($error) {
-                    $entry->addError('dub', Craft::t('_dub', 'Dub · {error}', ['error' => $error]));
+                    $entry->addError('dub', Craft::t('dub', 'Dub · {error}', ['error' => $error]));
                     $event->isValid = false;
                 }
             }
@@ -147,11 +147,11 @@ class Plugin extends BasePlugin
             $hasApiKey = !empty(Craft::parseEnv($settings->apiKey));
             $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId());
 
-            $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/_dub') : null;
+            $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/dub') : null;
 
             $currentKey = $shortLink ? ltrim(parse_url($shortLink, PHP_URL_PATH), '/') : null;
 
-            $row = Craft::$app->getView()->renderTemplate('_dub/_entry-sidebar.twig', [
+            $row = Craft::$app->getView()->renderTemplate('dub/_entry-sidebar.twig', [
                 'shortLink' => $shortLink,
                 'currentKey' => $currentKey,
                 'hasApiKey' => $hasApiKey,

@@ -1,28 +1,28 @@
 {% if isLive %}
 <fieldset>
-    <legend class="h6">{{ 'Short Link' | t('_dub') }}</legend>
+    <legend class="h6">{{ 'Short Link' | t('dub') }}</legend>
     <div class="meta">
         {% if isLive %}
         <div class="field">
-            <div class="heading">{{ 'Slug' | t('_dub') }}</div>
+            <div class="heading">{{ 'Slug' | t('dub') }}</div>
             <div class="input">
                 {% if hasApiKey %}
-                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}" placeholder="{{ '' | t('_dub') }}">
+                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}" placeholder="{{ '' | t('dub') }}">
                 {% else %}
-                    <a href="{{ settingsUrl }}">{{ 'Add API Key' | t('_dub') }}</a>
+                    <a href="{{ settingsUrl }}">{{ 'Add API Key' | t('dub') }}</a>
                 {% endif %}
             </div>
         </div>
         {% endif %}
         {% if shortLink %}
             <div class="field">
-                <div class="heading">{{ 'Link' | t('_dub') }}</div>
+                <div class="heading">{{ 'Link' | t('dub') }}</div>
                 <div class="input flex" style="align-items: center; justify-content: space-between; gap: 6px;">
                     <a href="{{ shortLink }}" target="_blank" rel="noopener">{{ shortLink | replace('https://', '') }}</a>
                     <button type="button"
                         data-url="{{ shortLink }}"
-                        title="{{ 'Copy to clipboard' | t('_dub') }}"
-                        aria-label="{{ 'Copy to clipboard' | t('_dub') }}"
+                        title="{{ 'Copy to clipboard' | t('dub') }}"
+                        aria-label="{{ 'Copy to clipboard' | t('dub') }}"
                         style="background: none; border: none; padding: 0; cursor: pointer; --icon-color: var(--gray-500);"
                         onclick="var b=this;navigator.clipboard.writeText(b.dataset.url).then(function(){b.classList.add('dub-copied');setTimeout(function(){b.classList.remove('dub-copied')},1500)})">
                         <span class="cp-icon small dub-copy-clipboard">{{ iconSvg('clipboard') }}</span>

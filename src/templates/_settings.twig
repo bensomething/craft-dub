@@ -3,13 +3,13 @@
 {%- import '_includes/forms.twig' as forms -%}
 <style>#settings-apiKey-field { margin-top: 0; }</style>
 {{ forms.autosuggestField({
-    label: 'API Key' | t('_dub'),
+    label: 'API Key' | t('dub'),
     id: 'apiKey',
     name: 'apiKey',
     value: settings.apiKey,
     suggestEnvVars: true,
     required: true,
-    instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('_dub'),
+    instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('dub'),
 }) }}
 
 {% if domains %}
@@ -18,16 +18,16 @@
         {% set domainOptions = domainOptions | merge([{ label: domain.slug, value: domain.slug }]) %}
     {% endfor %}
     {{ forms.selectField({
-        label: 'Domain' | t('_dub'),
+        label: 'Domain' | t('dub'),
         id: 'domain',
         name: 'domain',
         value: settings.domain,
         options: domainOptions,
-        instructions: 'Select the short link domain to use.' | t('_dub'),
+        instructions: 'Select the short link domain to use.' | t('dub'),
     }) }}
 {% else %}
     {{ forms.field({
-        label: 'Domain' | t('_dub'),
-        instructions: 'Select the short link domain to use.' | t('_dub'),
-    }, '<p class="warning">' ~ 'Save your API key first to load available domains.' | t('_dub') ~ '</p>') }}
+        label: 'Domain' | t('dub'),
+        instructions: 'Select the short link domain to use.' | t('dub'),
+    }, '<p class="warning">' ~ 'Save your API key first to load available domains.' | t('dub') ~ '</p>') }}
 {% endif %}
