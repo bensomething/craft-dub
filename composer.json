@@ -2,9 +2,10 @@
   "name": "bensomething/craft-dub",
   "description": "Create Dub short links for your entries.",
   "type": "craft-plugin",
+  "license": "MIT",
   "require": {
     "php": ">=8.2",
-    "craftcms/cms": "^5.9.0"
+    "craftcms/cms": "^5.0.0"
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",
@@ -19,7 +20,7 @@
     "handle": "_dub",
     "name": "Dub",
     "developer": "Ben Smith",
-    "documentationUrl": ""
+    "documentationUrl": "https://github.com/bensomething/craft-dub"
   },
   "scripts": {
     "check-cs": "ecs check --ansi",
