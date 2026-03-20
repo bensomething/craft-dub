@@ -12,6 +12,7 @@ class Install extends Migration
             $this->createTable('{{%dub_links}}', [
                 'id' => $this->primaryKey(),
                 'entryId' => $this->integer()->notNull(),
+                'siteId' => $this->integer()->notNull(),
                 'dubLinkId' => $this->string(),
                 'shortLink' => $this->string(500),
                 'dateCreated' => $this->dateTime()->notNull(),

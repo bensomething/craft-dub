@@ -18,6 +18,7 @@ class DubService extends Component
     private ?string $lastError = null;
     private ?Client $client = null;
     private ?array $pendingLink = null;
+    private ?int $pendingSiteId = null;
 
     /**
      * Makes the Dub API call and caches the result. Returns an error string on failure.
@@ -36,6 +37,7 @@ class DubService extends Component
         }
 
         $domain = Craft::parseEnv($settings->domain);
+        $externalId = $entry->uid . '_' . $entry->siteId;
 
         $optionals = [];
         if ($customKey) {
@@ -46,14 +48,14 @@ class DubService extends Component
         }
 
         // Try to update existing link; create if not found
-        $result = $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, array_merge(['url' => $url, 'archived' => false], $optionals));
+        $result = $this->makeRequest('PATCH', '/links/ext_' . $externalId, array_merge(['url' => $url, 'archived' => false], $optionals));
 
         if ($result === null) {
             if ($this->lastError) {
                 return $this->lastError;
             }
 
-            $result = $this->makeRequest('POST', '/links', array_merge(['url' => $url, 'externalId' => $entry->uid], $optionals));
+            $result = $this->makeRequest('POST', '/links', array_merge(['url' => $url, 'externalId' => $externalId], $optionals));
 
             if ($result === null && $this->lastError) {
                 return $this->lastError;
@@ -61,6 +63,7 @@ class DubService extends Component
         }
 
         $this->pendingLink = $result;
+        $this->pendingSiteId = $entry->siteId;
 
         return null;
     }
@@ -70,18 +73,19 @@ class DubService extends Component
      */
     public function commitLink(int $entryId): void
     {
-        if ($this->pendingLink && isset($this->pendingLink['shortLink'])) {
-            $this->saveLink($entryId, $this->pendingLink['id'] ?? null, $this->pendingLink['shortLink']);
+        if ($this->pendingLink && isset($this->pendingLink['shortLink']) && $this->pendingSiteId !== null) {
+            $this->saveLink($entryId, $this->pendingSiteId, $this->pendingLink['id'] ?? null, $this->pendingLink['shortLink']);
         }
 
         $this->pendingLink = null;
+        $this->pendingSiteId = null;
     }
 
     public function deactivateLink(Entry $entry): void
     {
         $settings = Plugin::getInstance()->getSettings();
         if (Craft::parseEnv($settings->apiKey)) {
-            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, ['archived' => true]);
+            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid . '_' . $entry->siteId, ['archived' => true]);
         }
     }
 
@@ -89,7 +93,10 @@ class DubService extends Component
     {
         $settings = Plugin::getInstance()->getSettings();
         if (Craft::parseEnv($settings->apiKey)) {
-            $this->makeRequest('DELETE', '/links/ext_' . $entry->uid);
+            $records = DubLink::findAll(['entryId' => $entry->id]);
+            foreach ($records as $record) {
+                $this->makeRequest('DELETE', '/links/ext_' . $entry->uid . '_' . $record->siteId);
+            }
         }
         DubLink::deleteAll(['entryId' => $entry->id]);
     }
@@ -100,23 +107,24 @@ class DubService extends Component
         return $result ?? [];
     }
 
-    public function getShortLink(?int $entryId): ?string
+    public function getShortLink(?int $entryId, int $siteId): ?string
     {
         if (!$entryId) {
             return null;
         }
-        return $this->findRecord($entryId)?->shortLink;
+        return $this->findRecord($entryId, $siteId)?->shortLink;
     }
 
-    private function findRecord(int $entryId): ?DubLink
+    private function findRecord(int $entryId, int $siteId): ?DubLink
     {
-        return DubLink::findOne(['entryId' => $entryId]);
+        return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
     }
 
-    private function saveLink(int $entryId, ?string $dubLinkId, string $shortLink): void
+    private function saveLink(int $entryId, int $siteId, ?string $dubLinkId, string $shortLink): void
     {
-        $record = $this->findRecord($entryId) ?? new DubLink();
+        $record = $this->findRecord($entryId, $siteId) ?? new DubLink();
         $record->entryId = $entryId;
+        $record->siteId = $siteId;
         $record->dubLinkId = $dubLinkId;
         $record->shortLink = $shortLink;
         if (!$record->save()) {

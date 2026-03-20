@@ -7,6 +7,7 @@ use craft\db\ActiveRecord;
 /**
  * @property int $id
  * @property int $entryId
+ * @property int $siteId
  * @property string|null $dubLinkId
  * @property string|null $shortLink
  */

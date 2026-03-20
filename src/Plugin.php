@@ -73,10 +73,6 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            if ($entry->siteId !== Craft::$app->sites->getPrimarySite()->id) {
-                return;
-            }
-
             if (!$this->entrySectionHasUrls($entry)) {
                 return;
             }
@@ -87,7 +83,7 @@ class Plugin extends BasePlugin
 
             $isConsole = Craft::$app->getRequest()->getIsConsoleRequest();
             $customKey = !$isConsole ? Craft::$app->getRequest()->getBodyParam('dubCustomKey') ?: null : null;
-            $hasExistingLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId()) !== null;
+            $hasExistingLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId) !== null;
 
             if ($customKey !== null || $hasExistingLink) {
                 $error = Plugin::getInstance()->dub->prepareLink($entry, $customKey);
@@ -103,10 +99,6 @@ class Plugin extends BasePlugin
             $entry = $event->sender;
 
             if ($entry->getIsDraft() || $entry->getIsRevision()) {
-                return;
-            }
-
-            if ($entry->siteId !== Craft::$app->sites->getPrimarySite()->id) {
                 return;
             }
 
@@ -145,7 +137,7 @@ class Plugin extends BasePlugin
 
             $settings = Plugin::getInstance()->getSettings();
             $hasApiKey = !empty(Craft::parseEnv($settings->apiKey));
-            $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId());
+            $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
 
             $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/dub') : null;
 
@@ -168,8 +160,7 @@ class Plugin extends BasePlugin
         if (!$section) {
             return false;
         }
-        $primarySiteId = Craft::$app->sites->getPrimarySite()->id;
         $siteSettings = $section->getSiteSettings();
-        return !empty($siteSettings[$primarySiteId]) && $siteSettings[$primarySiteId]->hasUrls;
+        return !empty($siteSettings[$entry->siteId]) && $siteSettings[$entry->siteId]->hasUrls;
     }
 }
