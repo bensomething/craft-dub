@@ -46,7 +46,7 @@ class DubService extends Component
         }
 
         // Try to update existing link; create if not found
-        $result = $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, array_merge(['url' => $url, 'active' => true], $optionals));
+        $result = $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, array_merge(['url' => $url, 'archived' => false], $optionals));
 
         if ($result === null) {
             if ($this->lastError) {
@@ -81,7 +81,7 @@ class DubService extends Component
     {
         $settings = Plugin::getInstance()->getSettings();
         if (Craft::parseEnv($settings->apiKey)) {
-            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, ['active' => false]);
+            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid, ['archived' => true]);
         }
     }
 
