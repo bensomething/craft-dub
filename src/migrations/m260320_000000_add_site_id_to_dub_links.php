@@ -4,7 +4,7 @@ namespace bensomething\craftdub\migrations;
 
 use craft\db\Migration;
 
-class m20260320_000000_add_site_id_to_dub_links extends Migration
+class m260320_000000_add_site_id_to_dub_links extends Migration
 {
     public function safeUp(): bool
     {
