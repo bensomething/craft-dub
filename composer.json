@@ -19,7 +19,7 @@
   "extra": {
     "handle": "dub",
     "name": "Dub",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "developer": "Ben Smith",
     "developerUrl": "https://github.com/bensomething",
     "documentationUrl": "https://github.com/bensomething/craft-dub",
