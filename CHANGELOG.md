@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-03-23
+
+### Changed
+- Open in Dub link is now only visible to admins.
+
 ## 1.0.0 - 2026-03-20
 
 ### Added
