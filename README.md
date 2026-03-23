@@ -1,6 +1,11 @@
 # Dub
 
+[![Stable Version](https://img.shields.io/packagist/v/bensomething/craft-dub?label=stable)](https://packagist.org/packages/bensomething/craft-dub)
+[![Total Downloads](https://img.shields.io/packagist/dt/bensomething/craft-dub)](https://packagist.org/packages/bensomething/craft-dub)
+
 Create Dub short links for your entries.
+
+![Dub plugin sidebar](resources/craft-dub-1.png)
 
 ## Requirements
 
