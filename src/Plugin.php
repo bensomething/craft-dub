@@ -143,7 +143,7 @@ class Plugin extends BasePlugin
 
             $currentKey = $shortLink ? ltrim(parse_url($shortLink, PHP_URL_PATH), '/') : null;
             $shortLinkDomain = $shortLink ? parse_url($shortLink, PHP_URL_HOST) : null;
-            $workspaceId = Plugin::getInstance()->dub->getWorkspaceId($entry->getCanonicalId(), $entry->siteId);
+            $workspaceId = Plugin::getInstance()->dub->getWorkspaceId();
 
             $dubDashboardUrl = null;
             if ($workspaceId && $shortLinkDomain && $currentKey) {

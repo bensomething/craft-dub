@@ -9,7 +9,6 @@ use craft\db\ActiveRecord;
  * @property int $entryId
  * @property int $siteId
  * @property string|null $dubLinkId
- * @property string|null $workspaceId
  * @property string|null $shortLink
  */
 class DubLink extends ActiveRecord

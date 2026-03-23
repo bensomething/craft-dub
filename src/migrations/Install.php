@@ -14,7 +14,6 @@ class Install extends Migration
                 'entryId' => $this->integer()->notNull(),
                 'siteId' => $this->integer()->notNull(),
                 'dubLinkId' => $this->string(),
-                'workspaceId' => $this->string(),
                 'shortLink' => $this->string(500),
                 'dateCreated' => $this->dateTime()->notNull(),
                 'dateUpdated' => $this->dateTime()->notNull(),
