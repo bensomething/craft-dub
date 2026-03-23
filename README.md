@@ -39,7 +39,7 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 
 ## Templating
 
-Use the `craft.dub.link()` Twig function to output a short link in your templates:
+Use the `dubLink(entry)` Twig function to output a short link in your templates:
 
 ```twig
 {% set shortLink = dubLink(entry) %}
