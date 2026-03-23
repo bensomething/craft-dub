@@ -12,7 +12,7 @@ class DubTwigExtension extends AbstractExtension
     public function getFunctions(): array
     {
         return [
-            new TwigFunction('craft.dub.link', [$this, 'getLink']),
+            new TwigFunction('dubLink', [$this, 'getLink']),
         ];
     }
 

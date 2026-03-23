@@ -3,7 +3,7 @@
 ## 1.0.2 - 2026-03-23
 
 ### Added
-- `craft.dub.link(entry)` Twig function for outputting short links in templates.
+- `dubLink(entry)` Twig function for outputting short links in templates.
 
 ## 1.0.1 - 2026-03-23
 
