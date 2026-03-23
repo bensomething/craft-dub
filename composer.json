@@ -19,8 +19,11 @@
   "extra": {
     "handle": "dub",
     "name": "Dub",
+    "version": "1.0.1",
     "developer": "Ben Smith",
-    "documentationUrl": "https://github.com/bensomething/craft-dub"
+    "developerUrl": "https://github.com/bensomething",
+    "documentationUrl": "https://github.com/bensomething/craft-dub",
+    "changelogUrl": "https://raw.githubusercontent.com/bensomething/craft-dub/develop/CHANGELOG.md"
   },
   "scripts": {
     "check-cs": "ecs check --ansi",
