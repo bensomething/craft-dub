@@ -18,7 +18,7 @@
         {% if shortLink %}
             <div class="field">
                 <div class="heading">{{ 'Link' | t('dub') }}</div>
-                <div class="input flex" style="align-items: center; justify-content: space-between; gap: 6px;">
+                <div class="input flex flex-nowrap" style="align-items: center; justify-content: space-between; gap: 6px;">
                     <a href="{{ shortLink }}" target="_blank" rel="noopener" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">{{ shortLink | replace('https://', '') }}</a>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <button type="button"
