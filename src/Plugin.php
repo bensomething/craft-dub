@@ -155,7 +155,7 @@ class Plugin extends BasePlugin
             $workspaceId = Plugin::getInstance()->dub->getWorkspaceId();
 
             $dubDashboardUrl = null;
-            if ($workspaceId && $shortLinkDomain && $currentKey) {
+            if ($workspaceId && $shortLinkDomain && $currentKey && Craft::$app->getUser()->getIsAdmin()) {
                 $dubDashboardUrl = 'https://app.dub.co/' . $workspaceId . '/links/' . $shortLinkDomain . '/' . $currentKey;
             }
 
