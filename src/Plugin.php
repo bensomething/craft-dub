@@ -83,7 +83,14 @@ class Plugin extends BasePlugin
 
             $isConsole = Craft::$app->getRequest()->getIsConsoleRequest();
             $customKey = !$isConsole ? Craft::$app->getRequest()->getBodyParam('dubCustomKey') ?: null : null;
+            $shortLinkPresent = !$isConsole ? Craft::$app->getRequest()->getBodyParam('dubShortLinkPresent') : null;
             $hasExistingLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId) !== null;
+
+            // Cleared slug with existing link = schedule deletion
+            if ($shortLinkPresent && $customKey === null && $hasExistingLink) {
+                Plugin::getInstance()->dub->scheduleDeletion($entry);
+                return;
+            }
 
             if ($customKey !== null || $hasExistingLink) {
                 $error = Plugin::getInstance()->dub->prepareLink($entry, $customKey);
@@ -106,7 +113,9 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            if ($entry->getStatus() === Entry::STATUS_LIVE) {
+            if (Plugin::getInstance()->dub->isPendingDeletion()) {
+                Plugin::getInstance()->dub->commitDeletion();
+            } elseif ($entry->getStatus() === Entry::STATUS_LIVE) {
                 Plugin::getInstance()->dub->commitLink($entry->id);
             } else {
                 Plugin::getInstance()->dub->deactivateLink($entry);

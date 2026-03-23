@@ -19,6 +19,34 @@ class DubService extends Component
     private ?Client $client = null;
     private ?array $pendingLink = null;
     private ?int $pendingSiteId = null;
+    private bool $pendingDelete = false;
+    private ?Entry $pendingDeleteEntry = null;
+
+    /**
+     * Schedules a link deletion to be committed in EVENT_AFTER_SAVE.
+     */
+    public function scheduleDeletion(Entry $entry): void
+    {
+        $this->pendingDelete = true;
+        $this->pendingDeleteEntry = $entry;
+    }
+
+    /**
+     * Executes any pending deletion and resets state.
+     */
+    public function commitDeletion(): void
+    {
+        if ($this->pendingDelete && $this->pendingDeleteEntry !== null) {
+            $this->deleteLink($this->pendingDeleteEntry);
+        }
+        $this->pendingDelete = false;
+        $this->pendingDeleteEntry = null;
+    }
+
+    public function isPendingDeletion(): bool
+    {
+        return $this->pendingDelete;
+    }
 
     /**
      * Makes the Dub API call and caches the result. Returns an error string on failure.

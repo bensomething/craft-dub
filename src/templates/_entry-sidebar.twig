@@ -7,6 +7,7 @@
             <div class="heading">{{ 'Slug' | t('dub') }}</div>
             <div class="input">
                 {% if hasApiKey %}
+                    {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
                     <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}" placeholder="{{ '' | t('dub') }}">
                 {% else %}
                     <a href="{{ settingsUrl }}">{{ 'Add API Key' | t('dub') }}</a>
