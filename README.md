@@ -4,7 +4,7 @@ Create Dub short links for your entries.
 
 ## Requirements
 
-- A [Dub](https://refer.dub.co/bensomething) account and API key (affiliate link). [Learn more.](https://dub.co/docs/api-reference/authentication#api-keys)
+- A [Dub](https://refer.dub.co/bensomething) account (affiliate link) and API key. [Learn more.](https://dub.co/docs/api-reference/authentication#api-keys)
 - Craft CMS 5.0.0 or later.
 - PHP 8.2 or later.
 
