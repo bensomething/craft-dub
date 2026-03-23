@@ -4,6 +4,7 @@ namespace bensomething\craftdub;
 
 use bensomething\craftdub\models\Settings;
 use bensomething\craftdub\services\DubService;
+use bensomething\craftdub\twigextensions\DubTwigExtension;
 use Craft;
 use craft\base\Element;
 use craft\base\Model;
@@ -38,6 +39,8 @@ class Plugin extends BasePlugin
     public function init(): void
     {
         parent::init();
+
+        Craft::$app->getView()->registerTwigExtension(new DubTwigExtension());
 
         $this->attachEventHandlers();
     }
