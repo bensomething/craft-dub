@@ -32,15 +32,12 @@ class DubService extends Component
     }
 
     /**
-     * Archives the link on Dub and removes the local DB record.
-     * The Dub link can be re-enabled by saving the entry with a slug again.
+     * Deletes the link from Dub and removes the local DB record.
      */
     public function commitDeletion(): void
     {
         if ($this->pendingDelete && $this->pendingDeleteEntry !== null) {
-            $entry = $this->pendingDeleteEntry;
-            $this->deactivateLink($entry);
-            DubLink::deleteAll(['entryId' => $entry->id, 'siteId' => $entry->siteId]);
+            $this->deleteLink($this->pendingDeleteEntry);
         }
         $this->pendingDelete = false;
         $this->pendingDeleteEntry = null;
