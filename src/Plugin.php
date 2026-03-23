@@ -142,6 +142,13 @@ class Plugin extends BasePlugin
             $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/dub') : null;
 
             $currentKey = $shortLink ? ltrim(parse_url($shortLink, PHP_URL_PATH), '/') : null;
+            $shortLinkDomain = $shortLink ? parse_url($shortLink, PHP_URL_HOST) : null;
+            $workspaceId = Plugin::getInstance()->dub->getWorkspaceId($entry->getCanonicalId(), $entry->siteId);
+
+            $dubDashboardUrl = null;
+            if ($workspaceId && $shortLinkDomain && $currentKey) {
+                $dubDashboardUrl = 'https://app.dub.co/' . $workspaceId . '/links/' . $shortLinkDomain . '/' . $currentKey;
+            }
 
             $row = Craft::$app->getView()->renderTemplate('dub/_entry-sidebar.twig', [
                 'shortLink' => $shortLink,
@@ -149,6 +156,7 @@ class Plugin extends BasePlugin
                 'hasApiKey' => $hasApiKey,
                 'settingsUrl' => $settingsUrl,
                 'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
+                'dubDashboardUrl' => $dubDashboardUrl,
             ]);
             $event->html = preg_replace('/<fieldset>/', $row . '<fieldset>', $event->html, 1);
         });

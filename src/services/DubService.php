@@ -74,7 +74,7 @@ class DubService extends Component
     public function commitLink(int $entryId): void
     {
         if ($this->pendingLink && isset($this->pendingLink['shortLink']) && $this->pendingSiteId !== null) {
-            $this->saveLink($entryId, $this->pendingSiteId, $this->pendingLink['id'] ?? null, $this->pendingLink['shortLink']);
+            $this->saveLink($entryId, $this->pendingSiteId, $this->pendingLink['id'] ?? null, $this->pendingLink['workspaceId'] ?? null, $this->pendingLink['shortLink']);
         }
 
         $this->pendingLink = null;
@@ -115,17 +115,26 @@ class DubService extends Component
         return $this->findRecord($entryId, $siteId)?->shortLink;
     }
 
+    public function getWorkspaceId(?int $entryId, int $siteId): ?string
+    {
+        if (!$entryId) {
+            return null;
+        }
+        return $this->findRecord($entryId, $siteId)?->workspaceId;
+    }
+
     private function findRecord(int $entryId, int $siteId): ?DubLink
     {
         return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
     }
 
-    private function saveLink(int $entryId, int $siteId, ?string $dubLinkId, string $shortLink): void
+    private function saveLink(int $entryId, int $siteId, ?string $dubLinkId, ?string $workspaceId, string $shortLink): void
     {
         $record = $this->findRecord($entryId, $siteId) ?? new DubLink();
         $record->entryId = $entryId;
         $record->siteId = $siteId;
         $record->dubLinkId = $dubLinkId;
+        $record->workspaceId = $workspaceId;
         $record->shortLink = $shortLink;
         if (!$record->save()) {
             Craft::error('Dub: saveLink failed – ' . json_encode($record->getErrors()), __METHOD__);
