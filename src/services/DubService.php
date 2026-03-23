@@ -57,7 +57,7 @@ class DubService extends Component
 
             $result = $this->makeRequest('POST', '/links', array_merge(['url' => $url, 'externalId' => $externalId], $optionals));
 
-            if ($result === null && $this->lastError) {
+            if ($result === null) {
                 return $this->lastError;
             }
         }
