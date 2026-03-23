@@ -10,6 +10,8 @@ Create Dub short links for your entries.
 
 ## Installation
 
+To install the plugin, search for "Dub" in the Craft Plugin Store, or install manually using composer.
+
 ```
 composer require bensomething/craft-dub
 ```
@@ -34,6 +36,17 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 - **Updating a short link:** update the short link slug in the sidebar and save. The existing Dub link is updated in place.
 - **Deleting a short link:** a short link will be removed from Dub when an entry is deleted or when a short link slug is removed and the entry is saved.
 - **Archiving a short link:** a short link will be archived in Dub when an entry is disabled.
+
+## Templating
+
+Use the `craft.dub.link()` Twig function to output a short link in your templates:
+
+```twig
+{% set shortLink = craft.dub.link(entry) %}
+{% if shortLink %}
+    <a href="{{ shortLink }}">{{ shortLink }}</a>
+{% endif %}
+```
 
 ![Dub plugin sidebar](resources/craft-dub-1.png)
 
