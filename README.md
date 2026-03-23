@@ -1,11 +1,6 @@
 # Dub
 
-[![Stable Version](https://img.shields.io/packagist/v/bensomething/craft-dub?label=stable)](https://packagist.org/packages/bensomething/craft-dub)
-[![Total Downloads](https://img.shields.io/packagist/dt/bensomething/craft-dub)](https://packagist.org/packages/bensomething/craft-dub)
-
 Create Dub short links for your entries.
-
-![Dub plugin sidebar](resources/craft-dub-1.png)
 
 ## Requirements
 
@@ -39,3 +34,8 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 - **Updating a short link:** update the short link slug in the sidebar and save. The existing Dub link is updated in place.
 - **Deleting a short link:** a short link will be removed from Dub when an entry is deleted or when a short link slug is removed and the entry is saved.
 - **Archiving a short link:** a short link will be archived in Dub when an entry is disabled.
+
+![Dub plugin sidebar](resources/craft-dub-1.png)
+
+[![Stable Version](https://img.shields.io/packagist/v/bensomething/craft-dub?label=stable)](https://packagist.org/packages/bensomething/craft-dub)
+[![Total Downloads](https://img.shields.io/packagist/dt/bensomething/craft-dub)](https://packagist.org/packages/bensomething/craft-dub)
