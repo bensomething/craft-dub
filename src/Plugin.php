@@ -95,7 +95,12 @@ class Plugin extends BasePlugin
             if ($customKey !== null || $hasExistingLink) {
                 $error = Plugin::getInstance()->dub->prepareLink($entry, $customKey);
                 if ($error) {
-                    $entry->addError('dub', Craft::t('dub', 'Dub · {error}', ['error' => $error]));
+                    $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
+                    $errorMessage = Craft::t('dub', 'Dub · {error}', ['error' => $error]);
+                    if ($shortLink) {
+                        $errorMessage .= ' <a href="' . $shortLink . '" target="_blank" rel="noopener">View in Dub.</a>';
+                    }
+                    $entry->addError('dub', $errorMessage);
                     $event->isValid = false;
                 }
             }
