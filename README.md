@@ -30,9 +30,7 @@ php craft plugin/install dub
 
 Once configured, a **Short Link** panel will appear in the sidebar of any entry that belongs to a section with URLs.
 
-- **Creating a short link:** enter a custom slug in the sidebar field and save the entry. If left blank, no short link is created.
-- **Updating a short link:** change the key in the sidebar and save. The existing Dub link is updated in place.
-- **Deleting a short link:** the short link is automatically removed from Dub when an entry is deleted.
-- **Archiving a short link:** the short link is automatically archived in Dub when an entry is disabled.
-
-Short links are only created for entries in the primary site that belong to sections with URLs.
+- **Creating a short link:** enter a custom slug in the **Short Link** sidebar section and save the entry. If left blank, no short link is created.
+- **Updating a short link:** update the short link slug in the sidebar and save. The existing Dub link is updated in place.
+- **Deleting a short link:** a short link will be removed from Dub when an entry is deleted or when a short link slug is removed and the entry is saved.
+- **Archiving a short link:** a short link will be archived in Dub when an entry is disabled.
