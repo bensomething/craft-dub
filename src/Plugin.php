@@ -59,10 +59,21 @@ class Plugin extends BasePlugin
             $domains = $this->dub->getDomains();
         }
 
+        $sectionOptions = [];
+        foreach (Craft::$app->getEntries()->getAllSections() as $section) {
+            foreach ($section->getSiteSettings() as $siteSetting) {
+                if ($siteSetting->hasUrls) {
+                    $sectionOptions[] = ['label' => $section->name, 'value' => $section->id];
+                    break;
+                }
+            }
+        }
+
         return Craft::$app->view->renderTemplate('dub/_settings.twig', [
             'plugin' => $this,
             'settings' => $settings,
             'domains' => $domains,
+            'sectionOptions' => $sectionOptions,
         ]);
     }
 
@@ -181,6 +192,13 @@ class Plugin extends BasePlugin
             return false;
         }
         $siteSettings = $section->getSiteSettings();
-        return !empty($siteSettings[$entry->siteId]) && $siteSettings[$entry->siteId]->hasUrls;
+        if (empty($siteSettings[$entry->siteId]) || !$siteSettings[$entry->siteId]->hasUrls) {
+            return false;
+        }
+        $allowedSections = $this->getSettings()->sections;
+        if (!empty($allowedSections) && !in_array($section->id, $allowedSections, false)) {
+            return false;
+        }
+        return true;
     }
 }
