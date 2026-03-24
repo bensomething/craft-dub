@@ -11,13 +11,18 @@ class Settings extends Model
 {
     public string $apiKey = '';
     public string $domain = '';
-    public array $sections = [];
+    public array|string $sections = ['*'];
 
     public function rules(): array
     {
         return [
             [['apiKey', 'domain'], 'string'],
-            [['sections'], 'each', 'rule' => ['integer']],
+            [['sections'], 'filter', 'filter' => function($value) {
+                if (!is_array($value)) {
+                    return ['*'];
+                }
+                return empty($value) ? ['*'] : $value;
+            }],
         ];
     }
 }

@@ -12,17 +12,6 @@
     instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('dub'),
 }) }}
 
-{% if sectionOptions %}
-    {{ forms.checkboxGroupField({
-        label: 'Sections' | t('dub'),
-        id: 'sections',
-        name: 'sections',
-        options: sectionOptions,
-        values: settings.sections,
-        instructions: 'Select which sections short links should be created for. Leave all unchecked to enable for all sections.' | t('dub'),
-    }) }}
-{% endif %}
-
 {% if domains %}
     {% set domainOptions = [] %}
     {% for domain in domains %}
@@ -41,4 +30,17 @@
         label: 'Domain' | t('dub'),
         instructions: 'Select the short link domain to use.' | t('dub'),
     }, '<p class="warning">' ~ 'Save your API key first to load available domains.' | t('dub') ~ '</p>') }}
+{% endif %}
+
+{% if sectionOptions %}
+<hr>
+{{ forms.checkboxSelectField({
+    label: 'Sections' | t('dub'),
+    id: 'sections',
+    name: 'sections',
+    options: sectionOptions,
+    values: '*' in settings.sections ? '*' : settings.sections,
+    showAllOption: true,
+    instructions: 'Select which sections to enable short links for.' | t('dub'),
+}) }}
 {% endif %}

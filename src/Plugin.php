@@ -154,13 +154,19 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            if (!$this->entrySectionHasUrls($entry)) {
+            if (!$this->entrySectionHasUrls($entry, false)) {
                 return;
             }
 
+            $sectionEnabled = $this->entrySectionHasUrls($entry, true);
             $settings = Plugin::getInstance()->getSettings();
             $hasApiKey = !empty(Craft::parseEnv($settings->apiKey));
             $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
+
+            // Only show sidebar if section is enabled or entry already has a short link
+            if (!$sectionEnabled && !$shortLink) {
+                return;
+            }
 
             $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/dub') : null;
 
@@ -178,6 +184,7 @@ class Plugin extends BasePlugin
                 'currentKey' => $currentKey,
                 'hasApiKey' => $hasApiKey,
                 'settingsUrl' => $settingsUrl,
+                'sectionEnabled' => $sectionEnabled,
                 'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
                 'dubDashboardUrl' => $dubDashboardUrl,
             ]);
@@ -185,7 +192,7 @@ class Plugin extends BasePlugin
         });
     }
 
-    private function entrySectionHasUrls(Entry $entry): bool
+    private function entrySectionHasUrls(Entry $entry, bool $checkSectionFilter = true): bool
     {
         $section = $entry->getSection();
         if (!$section) {
@@ -195,9 +202,11 @@ class Plugin extends BasePlugin
         if (empty($siteSettings[$entry->siteId]) || !$siteSettings[$entry->siteId]->hasUrls) {
             return false;
         }
-        $allowedSections = $this->getSettings()->sections;
-        if (!empty($allowedSections) && !in_array($section->id, $allowedSections, false)) {
-            return false;
+        if ($checkSectionFilter) {
+            $allowedSections = $this->getSettings()->sections;
+            if (!in_array('*', $allowedSections, true) && !in_array($section->id, $allowedSections, false)) {
+                return false;
+            }
         }
         return true;
     }
