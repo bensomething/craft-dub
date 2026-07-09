@@ -151,6 +151,146 @@ class DubService extends Component
         return Craft::$app->cache->get('dub_workspace_id') ?: null;
     }
 
+    /**
+     * Adopts pre-existing Dub links into the plugin.
+     *
+     * Paginates the whole workspace once, matches each link to a Craft entry by the
+     * path of its destination URL (path-only, so it survives host differences between
+     * environments), stamps the entry's externalId onto the link so the plugin can
+     * manage it going forward, and records it locally.
+     *
+     * Intended for one-time onboarding via the `dub/adopt` console command — Dub has
+     * no "look up a link by destination URL" endpoint, so we map from the Craft side.
+     *
+     * @param bool $dryRun When true, reports what would happen without touching the API or DB.
+     * @param callable|null $onResult Invoked per link as ($status, $message); $status is one
+     *   of: adopted, skipped, ambiguous, unmatched, error.
+     * @return array{adopted:int,skipped:int,ambiguous:int,unmatched:array<string>,failed:int,error:?string}
+     */
+    public function adoptLinks(bool $dryRun = false, ?callable $onResult = null): array
+    {
+        $summary = ['adopted' => 0, 'skipped' => 0, 'ambiguous' => 0, 'unmatched' => [], 'failed' => 0, 'error' => null];
+
+        $settings = Plugin::getInstance()->getSettings();
+        if (!Craft::parseEnv($settings->apiKey)) {
+            $summary['error'] = 'No Dub API key configured.';
+            return $summary;
+        }
+        $domain = Craft::parseEnv($settings->domain);
+
+        // Build a path => [entry candidates] map across every site. Keying by path (not
+        // full URL) keeps a match ambiguous only when two sites genuinely share a path.
+        $pathMap = [];
+        foreach (Craft::$app->getSites()->getAllSites() as $site) {
+            foreach (Entry::find()->siteId($site->id)->status(null)->each() as $entry) {
+                $url = $entry->getUrl();
+                if (!$url) {
+                    continue;
+                }
+                $path = $this->urlPath($url);
+                if ($path !== '') {
+                    $pathMap[$path][] = ['id' => $entry->id, 'uid' => $entry->uid, 'siteId' => $site->id, 'title' => $entry->title];
+                }
+            }
+        }
+
+        // Walk the entire workspace, page by page.
+        $page = 1;
+        $pageSize = 100;
+        do {
+            $query = ['page' => $page, 'pageSize' => $pageSize];
+            if ($domain) {
+                $query['domain'] = $domain;
+            }
+
+            $links = $this->makeRequest('GET', '/links', [], $query);
+            if ($links === null && $this->lastError) {
+                $summary['error'] = $this->lastError;
+                return $summary;
+            }
+            if (!is_array($links) || empty($links)) {
+                break;
+            }
+
+            foreach ($links as $link) {
+                $this->adoptOne($link, $pathMap, $dryRun, $summary, $onResult);
+            }
+
+            $page++;
+        } while (count($links) === $pageSize);
+
+        return $summary;
+    }
+
+    /**
+     * Matches a single Dub link to an entry and adopts it. Mutates $summary in place.
+     */
+    private function adoptOne(array $link, array $pathMap, bool $dryRun, array &$summary, ?callable $onResult): void
+    {
+        $dubId = $link['id'] ?? null;
+        $shortLink = $link['shortLink'] ?? null;
+        $destUrl = $link['url'] ?? null;
+        if (!$dubId || !$shortLink || !$destUrl) {
+            return;
+        }
+
+        $candidates = $pathMap[$this->urlPath($destUrl)] ?? [];
+
+        if (empty($candidates)) {
+            $summary['unmatched'][] = $shortLink . ' → ' . $destUrl;
+            $onResult && $onResult('unmatched', $shortLink . ' → ' . $destUrl);
+            return;
+        }
+
+        // A path shared by more than one site can't be resolved safely — skip it.
+        if (count($candidates) > 1) {
+            $summary['ambiguous']++;
+            $onResult && $onResult('ambiguous', $shortLink . ' → ' . $destUrl . ' (' . count($candidates) . ' entries share this path)');
+            return;
+        }
+
+        $entry = $candidates[0];
+        $label = $entry['title'] . ' [' . $entry['siteId'] . ']';
+
+        if ($this->findRecord($entry['id'], $entry['siteId']) !== null) {
+            $summary['skipped']++;
+            $onResult && $onResult('skipped', $label . ' — already linked');
+            return;
+        }
+
+        if ($dryRun) {
+            $summary['adopted']++;
+            $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
+            return;
+        }
+
+        // Stamp our externalId so subsequent entry saves target the link via PATCH.
+        if (empty($link['externalId'])) {
+            $claimed = $this->makeRequest('PATCH', '/links/' . $dubId, ['externalId' => $entry['uid'] . '_' . $entry['siteId']]);
+            if ($claimed === null && $this->lastError) {
+                $summary['failed']++;
+                $onResult && $onResult('error', $label . ' — ' . $this->lastError);
+                return;
+            }
+        }
+
+        if (isset($link['workspaceId'])) {
+            Craft::$app->cache->set('dub_workspace_id', $link['workspaceId']);
+        }
+
+        $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink);
+        $summary['adopted']++;
+        $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
+    }
+
+    /**
+     * Normalises a URL to its lowercased, trailing-slash-trimmed path for matching.
+     */
+    private function urlPath(string $url): string
+    {
+        return rtrim(strtolower(parse_url($url, PHP_URL_PATH) ?? ''), '/');
+    }
+
     private function findRecord(int $entryId, int $siteId): ?DubLink
     {
         return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
@@ -187,7 +327,7 @@ class DubService extends Component
      * Returns the decoded response body, or null on failure.
      * Sets $this->lastError for non-404 client errors.
      */
-    private function makeRequest(string $method, string $path, array $body = []): ?array
+    private function makeRequest(string $method, string $path, array $body = [], array $query = []): ?array
     {
         $this->lastError = null;
 
@@ -195,6 +335,9 @@ class DubService extends Component
             $options = [];
             if (!empty($body)) {
                 $options['json'] = $body;
+            }
+            if (!empty($query)) {
+                $options['query'] = $query;
             }
 
             $response = $this->getClient()->request($method, $path, $options);

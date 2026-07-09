@@ -37,6 +37,22 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 - **Deleting a short link:** a short link will be removed from Dub when an entry is deleted or when a short link slug is removed and the entry is saved.
 - **Archiving a short link:** a short link will be archived in Dub when an entry is disabled.
 
+## Adopting existing links
+
+If your Dub workspace already contains short links for your entries — created manually or before installing the plugin — you can hand them over to the plugin in one pass:
+
+```
+php craft dub/adopt
+```
+
+This scans your workspace, matches each link to a Craft entry by the path of its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Links with no matching entry (or a path shared by more than one site) are left untouched.
+
+Add `--dry-run` to preview what would be adopted without making any changes:
+
+```
+php craft dub/adopt --dry-run
+```
+
 ## Templating
 
 Use the `dubLink(entry)` Twig function to output a short link in your templates:
