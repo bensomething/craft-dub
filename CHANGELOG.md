@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 - Unreleased
+
+### Added
+- `dub/adopt` console command to adopt pre-existing Dub links into the plugin, matching them to entries by destination URL path. Supports `--dry-run`.
+
 ## 1.0.3 - 2026-03-23
 
 ### Added
