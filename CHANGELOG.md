@@ -6,6 +6,9 @@
 - `dub/adopt` console command to adopt pre-existing Dub links into the plugin, matching them to entries by destination URL path. Supports `--dry-run` and `--rewrite` (fallback prefix remapping, e.g. `--rewrite="/areas-stages/=/venues/"`).
 - **Sections** setting to choose which sections short links are enabled for. Supports a `DUB_SECTIONS` environment override (comma-separated section handles).
 
+### Changed
+- The **Domain** setting is now an autosuggest field that lists your available Dub domains and accepts an environment variable (e.g. `$DUB_DOMAIN`).
+
 ## 1.0.3 - 2026-03-23
 
 ### Added
