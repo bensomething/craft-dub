@@ -27,6 +27,17 @@ php craft plugin/install dub
 1. Go to **Settings → Plugins → Dub** in the Craft control panel.
 2. Enter your Dub API key. You can use an environment variable (e.g. `$DUB_API_KEY`).
 3. After saving your API key, the **Domain** section will display a dropdown of your available domains.
+4. In the **Sections** field, choose which sections to enable short links for. Leave **All** selected to enable every section that has URLs.
+
+### Setting enabled sections via environment
+
+You can override the **Sections** selection with the `DUB_SECTIONS` environment variable — a comma-separated list of section **handles**:
+
+```
+DUB_SECTIONS=festivals,crew
+```
+
+When set, it takes precedence over the control panel selection (which is shown as read-only in the settings).
 
 ## Usage
 

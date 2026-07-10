@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 - Unreleased
+
+### Added
+- **Sections** setting to choose which sections short links are enabled for. Supports a `DUB_SECTIONS` environment override (comma-separated section handles).
+
 ## 1.0.3 - 2026-03-23
 
 ### Added

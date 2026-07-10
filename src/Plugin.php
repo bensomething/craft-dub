@@ -12,6 +12,7 @@ use craft\base\Plugin as BasePlugin;
 use craft\elements\Entry;
 use craft\events\DefineHtmlEvent;
 use craft\events\ModelEvent;
+use craft\helpers\App;
 use craft\helpers\UrlHelper;
 use yii\base\Event;
 
@@ -63,17 +64,21 @@ class Plugin extends BasePlugin
         foreach (Craft::$app->getEntries()->getAllSections() as $section) {
             foreach ($section->getSiteSettings() as $siteSetting) {
                 if ($siteSetting->hasUrls) {
-                    $sectionOptions[] = ['label' => $section->name, 'value' => $section->id];
+                    $sectionOptions[] = ['label' => $section->name, 'value' => $section->handle];
                     break;
                 }
             }
         }
+
+        $sectionsEnv = App::env('DUB_SECTIONS');
 
         return Craft::$app->view->renderTemplate('dub/_settings.twig', [
             'plugin' => $this,
             'settings' => $settings,
             'domains' => $domains,
             'sectionOptions' => $sectionOptions,
+            'enabledSections' => $this->getEnabledSections(),
+            'sectionsOverridden' => $sectionsEnv !== null && $sectionsEnv !== '',
         ]);
     }
 
@@ -203,11 +208,30 @@ class Plugin extends BasePlugin
             return false;
         }
         if ($checkSectionFilter) {
-            $allowedSections = $this->getSettings()->sections;
-            if (!in_array('*', $allowedSections, true) && !in_array($section->id, $allowedSections, false)) {
+            // Match on section handle (used by the settings UI and the DUB_SECTIONS env var).
+            // UIDs are still accepted for robustness against handle renames.
+            $allowedSections = $this->getEnabledSections();
+            if (
+                !in_array('*', $allowedSections, true) &&
+                !in_array($section->uid, $allowedSections, true) &&
+                !in_array($section->handle, $allowedSections, true)
+            ) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Resolves the enabled sections: the DUB_SECTIONS env var (comma-separated section
+     * handles) when set, otherwise the stored setting. Values may be '*', handles, or UIDs.
+     */
+    private function getEnabledSections(): array
+    {
+        $env = App::env('DUB_SECTIONS');
+        if ($env !== null && $env !== '') {
+            return array_map('trim', explode(',', $env));
+        }
+        return (array)$this->getSettings()->sections;
     }
 }

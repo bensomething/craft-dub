@@ -39,8 +39,10 @@
     id: 'sections',
     name: 'sections',
     options: sectionOptions,
-    values: '*' in settings.sections ? '*' : settings.sections,
+    values: '*' in enabledSections ? '*' : enabledSections,
     showAllOption: true,
+    disabled: sectionsOverridden,
     instructions: 'Select which sections to enable short links for.' | t('dub'),
+    warning: sectionsOverridden ? 'This is being overridden by the `DUB_SECTIONS` environment variable.' | t('dub') : null,
 }) }}
 {% endif %}
