@@ -1,15 +1,15 @@
 # Changelog
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-07-10
 
 ### Added
-- `dub/adopt` console command to adopt pre-existing Dub links into the plugin, matching them to entries by destination URL path. Supports `--dry-run` and `--rewrite` (fallback prefix remapping, e.g. `--rewrite="/areas-stages/=/venues/"`).
 - **Sections** setting to choose which sections short links are enabled for. Supports a `DUB_SECTIONS` environment override (comma-separated section handles).
 - Validation of the **Domain** setting against the domains in your Dub workspace.
+- `dub/adopt` console command to adopt pre-existing Dub links into the plugin, matching them to entries by destination URL path. Supports `--dry-run` and `--rewrite` (fallback prefix remapping, e.g. `--rewrite="/areas-stages/=/venues/"`).
 
 ### Changed
 - The **Domain** setting is now an autosuggest field that lists your available Dub domains and accepts an environment variable (e.g. `$DUB_DOMAIN`).
-- The entry sidebar now shows the configured domain as the slug prefix, and prompts to add an API key or select a domain when setup is incomplete.
+- The entry sidebar now shows the configured domain as the slug field label, and prompts to add an API key or select a domain when setup is incomplete. A domain must be selected before short links can be created (previously an unset domain fell back to Dub's default domain).
 
 ## 1.0.3 - 2026-03-23
 
