@@ -4,7 +4,13 @@
     <div class="meta">
         {% if isLive and sectionEnabled %}
         <div class="field">
-            <div class="heading">{{ 'Slug' | t('dub') }}</div>
+            <div class="heading">
+                {%- if hasApiKey and hasDomain -%}
+                    {{ domain }}
+                {%- else -%}
+                    {{ 'Slug' | t('dub') }}
+                {%- endif -%}
+            </div>
             <div class="input">
                 {% if not hasApiKey %}
                     <a href="{{ settingsUrl }}">{{ 'Add API Key' | t('dub') }}</a>
@@ -12,16 +18,7 @@
                     <a href="{{ settingsUrl }}">{{ 'Select a Domain' | t('dub') }}</a>
                 {% else %}
                     {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
-                    <div class="text dub-slug">
-                        <span class="dub-slug-prefix">{{ domain }}/</span>
-                        <input type="text" name="dubCustomKey" value="{{ currentKey ?? '' }}">
-                    </div>
-                    <style>
-                        .dub-slug { display: flex; align-items: center; width: 100%; }
-                        .dub-slug-prefix { color: var(--medium-text-color); white-space: nowrap; }
-                        .dub-slug input { flex: 1; min-width: 0; border: 0; background: transparent; box-shadow: none; padding: 0 0 0 1px; margin: 0; height: auto; }
-                        .dub-slug input:focus { box-shadow: none; }
-                    </style>
+                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}">
                 {% endif %}
             </div>
         </div>
