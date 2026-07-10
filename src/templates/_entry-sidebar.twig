@@ -4,13 +4,21 @@
     <div class="meta">
         {% if isLive and sectionEnabled %}
         <div class="field">
-            <div class="heading">{{ 'Slug' | t('dub') }}</div>
+            <div class="heading">
+                {%- if hasApiKey and hasDomain -%}
+                    {{ domain }}
+                {%- else -%}
+                    {{ 'Slug' | t('dub') }}
+                {%- endif -%}
+            </div>
             <div class="input">
-                {% if hasApiKey %}
-                    {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
-                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}" placeholder="{{ '' | t('dub') }}">
-                {% else %}
+                {% if not hasApiKey %}
                     <a href="{{ settingsUrl }}">{{ 'Add API Key' | t('dub') }}</a>
+                {% elseif not hasDomain %}
+                    <a href="{{ settingsUrl }}">{{ 'Select a Domain' | t('dub') }}</a>
+                {% else %}
+                    {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
+                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}">
                 {% endif %}
             </div>
         </div>
