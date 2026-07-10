@@ -163,11 +163,13 @@ class DubService extends Component
      * no "look up a link by destination URL" endpoint, so we map from the Craft side.
      *
      * @param bool $dryRun When true, reports what would happen without touching the API or DB.
+     * @param array<array{0:string,1:string}> $rewrites Prefix [from, to] pairs applied to a link's
+     *   destination path as a fallback when the raw path matches no entry (e.g. ['/areas-stages/', '/venues/']).
      * @param callable|null $onResult Invoked per link as ($status, $message); $status is one
      *   of: adopted, skipped, ambiguous, unmatched, error.
      * @return array{adopted:int,skipped:int,ambiguous:int,unmatched:array<string>,failed:int,error:?string}
      */
-    public function adoptLinks(bool $dryRun = false, ?callable $onResult = null): array
+    public function adoptLinks(bool $dryRun = false, array $rewrites = [], ?callable $onResult = null): array
     {
         $summary = ['adopted' => 0, 'skipped' => 0, 'ambiguous' => 0, 'unmatched' => [], 'failed' => 0, 'error' => null];
 
@@ -213,7 +215,7 @@ class DubService extends Component
             }
 
             foreach ($links as $link) {
-                $this->adoptOne($link, $pathMap, $dryRun, $summary, $onResult);
+                $this->adoptOne($link, $pathMap, $rewrites, $dryRun, $summary, $onResult);
             }
 
             $page++;
@@ -225,7 +227,7 @@ class DubService extends Component
     /**
      * Matches a single Dub link to an entry and adopts it. Mutates $summary in place.
      */
-    private function adoptOne(array $link, array $pathMap, bool $dryRun, array &$summary, ?callable $onResult): void
+    private function adoptOne(array $link, array $pathMap, array $rewrites, bool $dryRun, array &$summary, ?callable $onResult): void
     {
         $dubId = $link['id'] ?? null;
         $shortLink = $link['shortLink'] ?? null;
@@ -234,7 +236,7 @@ class DubService extends Component
             return;
         }
 
-        $candidates = $pathMap[$this->urlPath($destUrl)] ?? [];
+        $candidates = $this->matchCandidates($this->urlPath($destUrl), $pathMap, $rewrites);
 
         if (empty($candidates)) {
             $summary['unmatched'][] = $shortLink . ' → ' . $destUrl;
@@ -281,6 +283,30 @@ class DubService extends Component
         $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink);
         $summary['adopted']++;
         $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
+    }
+
+    /**
+     * Returns the entry candidates for a destination path, trying the raw path first and
+     * falling back to each prefix rewrite (e.g. /areas-stages/ => /venues/) in turn.
+     *
+     * @param array<array{0:string,1:string}> $rewrites
+     */
+    private function matchCandidates(string $path, array $pathMap, array $rewrites): array
+    {
+        if (!empty($pathMap[$path])) {
+            return $pathMap[$path];
+        }
+
+        foreach ($rewrites as [$from, $to]) {
+            if (str_starts_with($path, $from)) {
+                $rewritten = rtrim($to . substr($path, strlen($from)), '/');
+                if (!empty($pathMap[$rewritten])) {
+                    return $pathMap[$rewritten];
+                }
+            }
+        }
+
+        return [];
     }
 
     /**

@@ -23,14 +23,21 @@ class AdoptController extends Controller
      */
     public bool $dryRun = false;
 
+    /**
+     * @var string|null Comma-separated prefix rewrites (from=to) applied to a link's
+     * destination path as a fallback when the raw path matches no entry.
+     * Example: --rewrite="/areas-stages/=/venues/"
+     */
+    public ?string $rewrite = null;
+
     public function options($actionID): array
     {
-        return array_merge(parent::options($actionID), ['dryRun']);
+        return array_merge(parent::options($actionID), ['dryRun', 'rewrite']);
     }
 
     public function optionAliases(): array
     {
-        return array_merge(parent::optionAliases(), ['d' => 'dryRun']);
+        return array_merge(parent::optionAliases(), ['d' => 'dryRun', 'r' => 'rewrite']);
     }
 
     /**
@@ -51,7 +58,15 @@ class AdoptController extends Controller
             return ExitCode::OK;
         }
 
-        $summary = Plugin::getInstance()->dub->adoptLinks($this->dryRun, function(string $status, string $message): void {
+        $rewrites = [];
+        foreach (array_filter(explode(',', (string)$this->rewrite)) as $pair) {
+            $parts = explode('=', $pair, 2);
+            if (count($parts) === 2 && trim($parts[0]) !== '') {
+                $rewrites[] = [strtolower(trim($parts[0])), strtolower(trim($parts[1]))];
+            }
+        }
+
+        $summary = Plugin::getInstance()->dub->adoptLinks($this->dryRun, $rewrites, function(string $status, string $message): void {
             switch ($status) {
                 case 'adopted':
                     $this->stdout($this->dryRun ? '✓ would adopt ' : '✓ adopted    ', Console::FG_GREEN);
