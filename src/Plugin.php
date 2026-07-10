@@ -166,6 +166,8 @@ class Plugin extends BasePlugin
             $sectionEnabled = $this->entrySectionHasUrls($entry, true);
             $settings = Plugin::getInstance()->getSettings();
             $hasApiKey = !empty(Craft::parseEnv($settings->apiKey));
+            $domain = Craft::parseEnv($settings->domain);
+            $hasDomain = !empty($domain);
             $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
 
             // Only show sidebar if section is enabled or entry already has a short link
@@ -173,7 +175,8 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            $settingsUrl = !$hasApiKey ? UrlHelper::cpUrl('settings/plugins/dub') : null;
+            // Link to settings whenever setup is incomplete (no API key, or no domain).
+            $settingsUrl = (!$hasApiKey || !$hasDomain) ? UrlHelper::cpUrl('settings/plugins/dub') : null;
 
             $currentKey = $shortLink ? ltrim(parse_url($shortLink, PHP_URL_PATH), '/') : null;
             $shortLinkDomain = $shortLink ? parse_url($shortLink, PHP_URL_HOST) : null;
@@ -188,6 +191,8 @@ class Plugin extends BasePlugin
                 'shortLink' => $shortLink,
                 'currentKey' => $currentKey,
                 'hasApiKey' => $hasApiKey,
+                'hasDomain' => $hasDomain,
+                'domain' => $domain,
                 'settingsUrl' => $settingsUrl,
                 'sectionEnabled' => $sectionEnabled,
                 'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
