@@ -53,6 +53,12 @@ Add `--dry-run` to preview what would be adopted without making any changes:
 php craft dub/adopt --dry-run
 ```
 
+If some of your Dub links point to an old path prefix, use `--rewrite` to remap the destination path when matching. It only applies as a fallback, when the link's original path matches no entry. Pass one or more comma-separated `from=to` prefixes:
+
+```
+php craft dub/adopt --rewrite="/areas-stages/=/venues/"
+```
+
 ## Templating
 
 Use the `dubLink(entry)` Twig function to output a short link in your templates:
