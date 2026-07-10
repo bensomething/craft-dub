@@ -2,7 +2,7 @@
 <fieldset>
     <legend class="h6">{{ 'Short Link' | t('dub') }}</legend>
     <div class="meta">
-        {% if isLive %}
+        {% if isLive and sectionEnabled %}
         <div class="field">
             <div class="heading">{{ 'Slug' | t('dub') }}</div>
             <div class="input">

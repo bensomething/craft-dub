@@ -31,3 +31,18 @@
         instructions: 'Select the short link domain to use.' | t('dub'),
     }, '<p class="warning">' ~ 'Save your API key first to load available domains.' | t('dub') ~ '</p>') }}
 {% endif %}
+
+{% if sectionOptions %}
+<hr>
+{{ forms.checkboxSelectField({
+    label: 'Sections' | t('dub'),
+    id: 'sections',
+    name: 'sections',
+    options: sectionOptions,
+    values: '*' in enabledSections ? '*' : enabledSections,
+    showAllOption: true,
+    disabled: sectionsOverridden,
+    instructions: 'Select which sections to enable short links for.' | t('dub'),
+    warning: sectionsOverridden ? 'This is being overridden by the `DUB_SECTIONS` environment variable.' | t('dub') : null,
+}) }}
+{% endif %}
