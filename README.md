@@ -1,4 +1,4 @@
-# Dub
+# Dub Links
 
 Create Dub short links for your entries.
 
@@ -24,14 +24,15 @@ php craft plugin/install dub
 
 ## Configuration
 
-1. Go to **Settings → Plugins → Dub** in the Craft control panel.
-2. Enter your Dub API key. You can use an environment variable (e.g. `$DUB_API_KEY`).
+1. Go to **Settings → Plugins → Dub Links** in the Craft control panel.
+2. On the **General** tab, enter your Dub API key. You can use an environment variable (e.g. `$DUB_API_KEY`).
 3. After saving your API key, the **Domain** field will suggest your available domains. Pick one, or use an environment variable (e.g. `$DUB_DOMAIN`).
 4. In the **Sections** field, choose which sections to enable short links for. Leave **All** selected to enable every section that has URLs.
+5. On the **Sidebar** tab, choose how the **QR code** appears in the entry sidebar (**None**, **Icon**, or **Full**), set its **style** (size, margin, foreground/background colour), and choose whether to **Show click count**.
 
 ### Setting enabled sections via environment
 
-You can override the **Sections** selection with the `DUB_SECTIONS` environment variable — a comma-separated list of section **handles**:
+You can override the **Sections** selection with the `DUB_SECTIONS` environment variable, a comma-separated list of section **handles**:
 
 ```
 DUB_SECTIONS=festivals,crew
@@ -47,6 +48,8 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 - **Updating a short link:** update the short link slug in the sidebar and save. The existing Dub link is updated in place.
 - **Deleting a short link:** a short link will be removed from Dub when an entry is deleted or when a short link slug is removed and the entry is saved.
 - **Archiving a short link:** a short link will be archived in Dub when an entry is disabled.
+- **QR code:** depending on the **Sidebar → QR code** setting, a QR code for the short link is shown in the sidebar as a small icon or a full image.
+- **Click count:** enable **Sidebar → Show click count** to display a read-only click total for the short link in the sidebar.
 
 ## Adopting existing links
 
@@ -78,6 +81,15 @@ Use the `dubLink(entry)` Twig function to output a short link in your templates:
 {% set shortLink = dubLink(entry) %}
 {% if shortLink %}
     <a href="{{ shortLink }}">{{ shortLink }}</a>
+{% endif %}
+```
+
+Use the `dubQr(entry)` Twig function to output the short link's QR code image:
+
+```twig
+{% set qr = dubQr(entry) %}
+{% if qr %}
+    <img src="{{ qr }}" alt="QR code">
 {% endif %}
 ```
 

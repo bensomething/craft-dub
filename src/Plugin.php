@@ -14,6 +14,7 @@ use craft\events\DefineHtmlEvent;
 use craft\events\ModelEvent;
 use craft\helpers\App;
 use craft\helpers\UrlHelper;
+use craft\web\Controller;
 use yii\base\Event;
 
 /**
@@ -51,7 +52,13 @@ class Plugin extends BasePlugin
         return Craft::createObject(Settings::class);
     }
 
-    protected function settingsHtml(): ?string
+    /**
+     * Renders the settings as a full CP page (rather than the default fragment) so it can
+     * declare native tabs via the `tabs` variable — Craft renders and wires those itself,
+     * no custom JS. The field inputs are namespaced under `settings` to match how Craft's
+     * default plugin-settings response posts them.
+     */
+    public function getSettingsResponse(): mixed
     {
         $settings = $this->getSettings();
         $domains = [];
@@ -72,7 +79,10 @@ class Plugin extends BasePlugin
 
         $sectionsEnv = App::env('DUB_SECTIONS');
 
-        return Craft::$app->view->renderTemplate('dub/_settings.twig', [
+        /** @var Controller $controller */
+        $controller = Craft::$app->controller;
+
+        return $controller->renderTemplate('dub/_settings.twig', [
             'plugin' => $this,
             'settings' => $settings,
             'domains' => $domains,
@@ -132,10 +142,10 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            if (Plugin::getInstance()->dub->isPendingDeletion()) {
-                Plugin::getInstance()->dub->commitDeletion();
+            if (Plugin::getInstance()->dub->isPendingDeletion($entry)) {
+                Plugin::getInstance()->dub->commitDeletion($entry);
             } elseif ($entry->getStatus() === Entry::STATUS_LIVE) {
-                Plugin::getInstance()->dub->commitLink($entry->id);
+                Plugin::getInstance()->dub->commitLink($entry);
             } else {
                 Plugin::getInstance()->dub->deactivateLink($entry);
             }
@@ -180,12 +190,17 @@ class Plugin extends BasePlugin
 
             $currentKey = $shortLink ? ltrim(parse_url($shortLink, PHP_URL_PATH), '/') : null;
             $shortLinkDomain = $shortLink ? parse_url($shortLink, PHP_URL_HOST) : null;
-            $workspaceId = Plugin::getInstance()->dub->getWorkspaceId();
+            $isAdmin = Craft::$app->getUser()->getIsAdmin();
+            $workspaceId = ($isAdmin && $shortLink) ? Plugin::getInstance()->dub->getWorkspaceId() : null;
 
             $dubDashboardUrl = null;
-            if ($workspaceId && $shortLinkDomain && $currentKey && Craft::$app->getUser()->getIsAdmin()) {
+            if ($workspaceId && $shortLinkDomain && $currentKey) {
                 $dubDashboardUrl = 'https://app.dub.co/' . $workspaceId . '/links/' . $shortLinkDomain . '/' . $currentKey;
             }
+
+            $qrViewMode = $settings->qrViewMode;
+            $qrUrl = ($shortLink && $qrViewMode !== 'none') ? Plugin::getInstance()->dub->getQrUrl($entry->getCanonicalId(), $entry->siteId) : null;
+            $clicks = ($shortLink && $settings->showClicks) ? Plugin::getInstance()->dub->getClicks($entry->getCanonicalId(), $entry->siteId) : null;
 
             $row = Craft::$app->getView()->renderTemplate('dub/_entry-sidebar.twig', [
                 'shortLink' => $shortLink,
@@ -197,9 +212,39 @@ class Plugin extends BasePlugin
                 'sectionEnabled' => $sectionEnabled,
                 'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
                 'dubDashboardUrl' => $dubDashboardUrl,
+                'qrUrl' => $qrUrl,
+                'qrViewMode' => $qrViewMode,
+                'clicks' => $clicks,
             ]);
-            $event->html = preg_replace('/<fieldset>/', $row . '<fieldset>', $event->html, 1);
+            $event->html = $this->injectSidebarRow($event->html, $row);
         });
+    }
+
+    /**
+     * Inserts the short-link row into the entry sidebar so it sits after the main metadata
+     * (slug, dates, …) but before the "Notes about your changes" field. Falls back to the
+     * first metadata fieldset, then to appending, for sidebars shaped differently — e.g. a
+     * Single with its meta fields hidden renders only the notes field.
+     */
+    private function injectSidebarRow(string $html, string $row): string
+    {
+        // Prefer just before the notes field. Its wrapper carries a random id, but the
+        // textarea's name="notes" is stable; walk back to the enclosing `.field` wrapper
+        // (the nested elements between them are `.heading`/`.input`, never `.field`).
+        $notesPos = strpos($html, 'name="notes"');
+        if ($notesPos !== false) {
+            $wrapperPos = strrpos(substr($html, 0, $notesPos), '<div class="field');
+            if ($wrapperPos !== false) {
+                return substr($html, 0, $wrapperPos) . $row . substr($html, $wrapperPos);
+            }
+        }
+
+        // No notes field (e.g. a revision): sit above the first metadata fieldset instead.
+        if (str_contains($html, '<fieldset>')) {
+            return preg_replace('/<fieldset>/', $row . '<fieldset>', $html, 1);
+        }
+
+        return $html . $row;
     }
 
     private function entrySectionHasUrls(Entry $entry, bool $checkSectionFilter = true): bool
