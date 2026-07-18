@@ -38,6 +38,13 @@
                             <span class="cp-icon small dub-copy-clipboard">{{ iconSvg('clipboard') }}</span>
                             <span class="cp-icon small dub-copy-check">{{ iconSvg('check') }}</span>
                         </button>
+                        {% if qrUrl and qrViewMode == 'icon' %}
+                            <a href="{{ qrUrl }}" target="_blank" rel="noopener"
+                                title="{{ 'View QR code' | t('dub') }}"
+                                style="display: flex; --icon-color: var(--gray-500);">
+                                <span class="cp-icon small">{{ iconSvg('qrcode') }}</span>
+                            </a>
+                        {% endif %}
                         {% if dubDashboardUrl %}
                             <a href="{{ dubDashboardUrl }}" target="_blank" rel="noopener"
                                 title="{{ 'View in Dub' | t('dub') }}"
@@ -53,6 +60,24 @@
                     </style>
                 </div>
             </div>
+            {% if clicks is not null %}
+                <div class="field">
+                    <div class="heading">{{ 'Clicks' | t('dub') }}</div>
+                    <div class="input">
+                        {{ (clicks == 1 ? '{n} click' : '{n} clicks') | t('dub', { n: clicks }) }}
+                    </div>
+                </div>
+            {% endif %}
+            {% if qrUrl and qrViewMode == 'full' %}
+                <div class="field">
+                    <div class="heading">{{ 'QR Code' | t('dub') }}</div>
+                    <div class="input">
+                        <a href="{{ qrUrl }}" target="_blank" rel="noopener" title="{{ 'Open QR code' | t('dub') }}">
+                            <img src="{{ qrUrl }}" alt="{{ 'QR code for {link}' | t('dub', { link: shortLink }) }}" width="120" height="120" style="display: block; width: 120px; height: 120px; border: 1px solid var(--hairline-color, #eee); border-radius: 4px;">
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
         {% endif %}
     </div>
 </fieldset>

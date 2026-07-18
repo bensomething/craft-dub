@@ -19,7 +19,6 @@
   "extra": {
     "handle": "dub",
     "name": "Dub Links",
-    "version": "1.1.0",
     "developer": "Ben Smith",
     "developerUrl": "https://bensomething.com",
     "documentationUrl": "https://github.com/bensomething/craft-dub",

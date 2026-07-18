@@ -13,11 +13,17 @@ class DubTwigExtension extends AbstractExtension
     {
         return [
             new TwigFunction('dubLink', [$this, 'getLink']),
+            new TwigFunction('dubQr', [$this, 'getQr']),
         ];
     }
 
     public function getLink(Entry $entry): ?string
     {
         return Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
+    }
+
+    public function getQr(Entry $entry): ?string
+    {
+        return Plugin::getInstance()->dub->getQrUrl($entry->getCanonicalId(), $entry->siteId);
     }
 }

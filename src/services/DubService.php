@@ -6,6 +6,7 @@ use bensomething\craftdub\Plugin;
 use bensomething\craftdub\records\DubLink;
 use Craft;
 use craft\elements\Entry;
+use craft\helpers\ElementHelper;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Throwable;
@@ -14,38 +15,51 @@ use yii\base\Component;
 class DubService extends Component
 {
     private const API_BASE = 'https://api.dub.co';
+    private const CLICKS_CACHE_TTL = 300;
+    private const WORKSPACE_CACHE_KEY = 'dub_workspace_id';
 
     private ?string $lastError = null;
     private ?Client $client = null;
-    private ?array $pendingLink = null;
-    private ?int $pendingSiteId = null;
-    private bool $pendingDelete = false;
-    private ?Entry $pendingDeleteEntry = null;
+
+    /** @var array<string,array> Cached API results awaiting commit, keyed by entry uid + site. */
+    private array $pendingLinks = [];
+
+    /** @var array<string,Entry> Entries scheduled for deletion, keyed by entry uid + site. */
+    private array $pendingDeletes = [];
+
+    /**
+     * A stable key for the pending-state maps. Uses the entry uid (assigned before
+     * EVENT_BEFORE_SAVE, unlike the numeric id on new entries) plus the site, so nested
+     * resave/multi-site saves each track their own state instead of clobbering a singleton.
+     */
+    private function pendingKey(Entry $entry): string
+    {
+        return $entry->uid . '_' . $entry->siteId;
+    }
 
     /**
      * Schedules a link deletion to be committed in EVENT_AFTER_SAVE.
      */
     public function scheduleDeletion(Entry $entry): void
     {
-        $this->pendingDelete = true;
-        $this->pendingDeleteEntry = $entry;
+        $this->pendingDeletes[$this->pendingKey($entry)] = $entry;
     }
 
     /**
      * Deletes the link from Dub and removes the local DB record.
      */
-    public function commitDeletion(): void
+    public function commitDeletion(Entry $entry): void
     {
-        if ($this->pendingDelete && $this->pendingDeleteEntry !== null) {
-            $this->deleteLink($this->pendingDeleteEntry);
+        $key = $this->pendingKey($entry);
+        if (isset($this->pendingDeletes[$key])) {
+            $this->deleteLink($this->pendingDeletes[$key]);
+            unset($this->pendingDeletes[$key]);
         }
-        $this->pendingDelete = false;
-        $this->pendingDeleteEntry = null;
     }
 
-    public function isPendingDeletion(): bool
+    public function isPendingDeletion(Entry $entry): bool
     {
-        return $this->pendingDelete;
+        return isset($this->pendingDeletes[$this->pendingKey($entry)]);
     }
 
     /**
@@ -54,7 +68,7 @@ class DubService extends Component
      */
     public function prepareLink(Entry $entry, ?string $customKey = null): ?string
     {
-        $url = $entry->getUrl();
+        $url = $this->resolveDestinationUrl($entry);
         if (!$url) {
             return null;
         }
@@ -83,15 +97,16 @@ class DubService extends Component
                 return $this->lastError;
             }
 
-            $result = $this->makeRequest('POST', '/links', array_merge(['url' => $url, 'externalId' => $externalId], $optionals));
+            $createBody = array_merge(['url' => $url, 'externalId' => $externalId], $optionals);
+
+            $result = $this->makeRequest('POST', '/links', $createBody);
 
             if ($result === null) {
                 return $this->lastError;
             }
         }
 
-        $this->pendingLink = $result;
-        $this->pendingSiteId = $entry->siteId;
+        $this->pendingLinks[$this->pendingKey($entry)] = $result;
 
         return null;
     }
@@ -99,17 +114,38 @@ class DubService extends Component
     /**
      * Saves the cached API result to the DB. Call after a successful entry save.
      */
-    public function commitLink(int $entryId): void
+    public function commitLink(Entry $entry): void
     {
-        if ($this->pendingLink && isset($this->pendingLink['shortLink']) && $this->pendingSiteId !== null) {
-            if (isset($this->pendingLink['workspaceId'])) {
-                Craft::$app->cache->set('dub_workspace_id', $this->pendingLink['workspaceId']);
-            }
-            $this->saveLink($entryId, $this->pendingSiteId, $this->pendingLink['id'] ?? null, $this->pendingLink['shortLink']);
+        $key = $this->pendingKey($entry);
+        $link = $this->pendingLinks[$key] ?? null;
+
+        if ($link && isset($link['shortLink'])) {
+            $this->rememberWorkspaceId($link);
+            $this->saveLink($entry->id, $entry->siteId, $link['id'] ?? null, $link['shortLink']);
         }
 
-        $this->pendingLink = null;
-        $this->pendingSiteId = null;
+        unset($this->pendingLinks[$key]);
+    }
+
+    /**
+     * Resolves the entry's final destination URL.
+     *
+     * At EVENT_BEFORE_SAVE the entry's own `uri` isn't settled yet — it's null for brand-new
+     * entries and stale when the slug changed in the same save (Craft regenerates it during
+     * validation, which runs after before-save). Running setUniqueUri on a throwaway clone
+     * computes the URI Craft is about to assign without touching the real entry or its slug,
+     * so the Dub destination is correct on first save and on slug changes. Falls back to the
+     * entry's current URL if resolution isn't possible.
+     */
+    private function resolveDestinationUrl(Entry $entry): ?string
+    {
+        try {
+            $clone = clone $entry;
+            ElementHelper::setUniqueUri($clone);
+            return $clone->getUrl() ?? $entry->getUrl();
+        } catch (Throwable $e) {
+            return $entry->getUrl();
+        }
     }
 
     public function deactivateLink(Entry $entry): void
@@ -148,7 +184,97 @@ class DubService extends Component
 
     public function getWorkspaceId(): ?string
     {
-        return Craft::$app->cache->get('dub_workspace_id') ?: null;
+        $cached = Craft::$app->cache->get(self::WORKSPACE_CACHE_KEY) ?: null;
+        if ($cached) {
+            return $cached;
+        }
+
+        // Self-heal after a cache flush: the workspace id is normally cached on save/adopt,
+        // but a cleared cache would otherwise hide the "View in Dub" link until the next save.
+        // Derive it once from any known link and re-cache it.
+        $settings = Plugin::getInstance()->getSettings();
+        if (!Craft::parseEnv($settings->apiKey)) {
+            return null;
+        }
+
+        $record = DubLink::find()->where(['not', ['dubLinkId' => null]])->one();
+        if (!$record instanceof DubLink) {
+            return null;
+        }
+
+        $link = $this->makeRequest('GET', '/links/info', [], ['linkId' => $record->dubLinkId]);
+        return $this->rememberWorkspaceId($link);
+    }
+
+    /**
+     * Caches the workspace id from an API link payload (if present) and returns it.
+     */
+    private function rememberWorkspaceId(?array $link): ?string
+    {
+        if (is_array($link) && isset($link['workspaceId'])) {
+            Craft::$app->cache->set(self::WORKSPACE_CACHE_KEY, $link['workspaceId']);
+            return $link['workspaceId'];
+        }
+        return null;
+    }
+
+    /**
+     * Returns the URL of Dub's QR code image for an entry's short link, or null if it has none.
+     * Dub's /qr endpoint is unauthenticated and renders a PNG for the given short link.
+     */
+    public function getQrUrl(?int $entryId, int $siteId): ?string
+    {
+        $shortLink = $this->getShortLink($entryId, $siteId);
+        if (!$shortLink) {
+            return null;
+        }
+
+        // Always hide the centre logo; the logo is a Dub-side concern we don't expose.
+        // Blank style cells are omitted, so Dub falls back to its own defaults for them.
+        $query = array_merge(
+            ['url' => $shortLink, 'hideLogo' => 'true'],
+            Plugin::getInstance()->getSettings()->getQrStyle(),
+        );
+
+        return self::API_BASE . '/qr?' . http_build_query($query);
+    }
+
+    /**
+     * Returns the click count for an entry's short link, or null if there's no link or the
+     * count can't be fetched. Cached briefly so rendering the entry sidebar doesn't hit the
+     * Dub API on every page load.
+     */
+    public function getClicks(?int $entryId, int $siteId): ?int
+    {
+        if (!$entryId) {
+            return null;
+        }
+
+        $record = $this->findRecord($entryId, $siteId);
+        if (!$record || !$record->dubLinkId) {
+            return null;
+        }
+
+        $cacheKey = 'dub_clicks_' . $record->dubLinkId;
+        $cached = Craft::$app->cache->get($cacheKey);
+        if ($cached !== false) {
+            return $cached;
+        }
+
+        $settings = Plugin::getInstance()->getSettings();
+        if (!Craft::parseEnv($settings->apiKey)) {
+            return null;
+        }
+
+        $link = $this->makeRequest('GET', '/links/info', [], ['linkId' => $record->dubLinkId]);
+        $this->rememberWorkspaceId($link);
+        if (!is_array($link) || !isset($link['clicks'])) {
+            return null;
+        }
+
+        $clicks = (int)$link['clicks'];
+        Craft::$app->cache->set($cacheKey, $clicks, self::CLICKS_CACHE_TTL);
+        return $clicks;
     }
 
     /**
@@ -276,9 +402,7 @@ class DubService extends Component
             }
         }
 
-        if (isset($link['workspaceId'])) {
-            Craft::$app->cache->set('dub_workspace_id', $link['workspaceId']);
-        }
+        $this->rememberWorkspaceId($link);
 
         $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink);
         $summary['adopted']++;

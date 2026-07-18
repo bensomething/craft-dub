@@ -1,44 +1,131 @@
 {# @var plugin \bensomething\craftdub\Plugin #}
 {# @var settings \bensomething\craftdub\models\Settings #}
-{%- import '_includes/forms.twig' as forms -%}
-<style>#settings-apiKey-field { margin-top: 0; }</style>
-{{ forms.autosuggestField({
-    label: 'API Key' | t('dub'),
-    id: 'apiKey',
-    name: 'apiKey',
-    value: settings.apiKey,
-    suggestEnvVars: true,
-    required: true,
-    errors: settings.getErrors('apiKey'),
-    instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('dub'),
-}) }}
+{% requireAdmin false %}
 
-{% set domainData = [] %}
-{% for domain in domains ?? [] %}
-    {% set domainData = domainData | merge([{ name: domain.slug }]) %}
-{% endfor %}
-{{ forms.autosuggestField({
-    label: 'Domain' | t('dub'),
-    id: 'domain',
-    name: 'domain',
-    value: settings.domain,
-    suggestions: domainData ? [{ label: 'Domains' | t('dub'), data: domainData }] : [],
-    suggestEnvVars: true,
-    errors: settings.getErrors('domain'),
-    instructions: 'Select the short link domain to use, or set it from an environment variable. Available domains load after saving your API key.' | t('dub'),
-}) }}
+{% extends '_layouts/cp' %}
+{% import '_includes/forms.twig' as forms %}
 
-{% if sectionOptions %}
-<hr>
-{{ forms.checkboxSelectField({
-    label: 'Sections' | t('dub'),
-    id: 'sections',
-    name: 'sections',
-    options: sectionOptions,
-    values: '*' in enabledSections ? '*' : enabledSections,
-    showAllOption: true,
-    disabled: sectionsOverridden,
-    instructions: 'Select which sections to enable short links for.' | t('dub'),
-    warning: sectionsOverridden ? 'This is being overridden by the `DUB_SECTIONS` environment variable.' | t('dub') : null,
-}) }}
-{% endif %}
+{% set title = plugin.name %}
+{% set docTitle = title ~ ' - ' ~ 'Plugins' | t('app') %}
+{% set fullPageForm = true %}
+
+{% set crumbs = [
+    { label: 'Settings' | t('app'), url: url('settings') },
+    { label: 'Plugins' | t('app'), url: url('settings/plugins') },
+] %}
+
+{% set formActions = [{
+    label: 'Save and continue editing' | t('app'),
+    redirect: "settings/plugins/#{plugin.handle}" | hash,
+    shortcut: true,
+    retainScroll: true,
+}] %}
+
+{% set selectedTab = 'dub-general' %}
+{% set tabs = {
+    'dub-general': { label: 'General' | t('dub'), url: '#dub-general' },
+    'dub-sidebar': { label: 'Sidebar' | t('dub'), url: '#dub-sidebar' },
+} %}
+
+{% block content %}
+    {{ actionInput('plugins/save-plugin-settings') }}
+    {{ hiddenInput('pluginHandle', plugin.handle) }}
+    {{ redirectInput('settings') }}
+
+    {# Full-bleed dividers, matching Craft's native `.content-pane > hr` (our hrs are nested a level deeper). #}
+    <style>#dub-general hr, #dub-sidebar hr { margin-inline: calc(var(--padding) * -1); }</style>
+
+    <div id="dub-general" role="tabpanel" aria-labelledby="tab-dub-general">
+        {% namespace 'settings' %}
+            <style>#settings-apiKey-field { margin-top: 0; }</style>
+            {{ forms.autosuggestField({
+                label: 'API Key' | t('dub'),
+                id: 'apiKey',
+                name: 'apiKey',
+                value: settings.apiKey,
+                suggestEnvVars: true,
+                required: true,
+                errors: settings.getErrors('apiKey'),
+                instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('dub'),
+            }) }}
+
+            {% set domainData = [] %}
+            {% for domain in domains ?? [] %}
+                {% set domainData = domainData | merge([{ name: domain.slug }]) %}
+            {% endfor %}
+            {{ forms.autosuggestField({
+                label: 'Domain' | t('dub'),
+                id: 'domain',
+                name: 'domain',
+                value: settings.domain,
+                suggestions: domainData ? [{ label: 'Domains' | t('dub'), data: domainData }] : [],
+                suggestEnvVars: true,
+                errors: settings.getErrors('domain'),
+                instructions: 'Select the short link domain to use, or set it from an environment variable. Available domains load after saving your API key.' | t('dub'),
+            }) }}
+
+            {% if sectionOptions %}
+            <hr>
+            {{ forms.checkboxSelectField({
+                label: 'Sections' | t('dub'),
+                id: 'sections',
+                name: 'sections',
+                options: sectionOptions,
+                values: '*' in enabledSections ? '*' : enabledSections,
+                showAllOption: true,
+                disabled: sectionsOverridden,
+                instructions: 'Select which sections to enable short links for.' | t('dub'),
+                warning: sectionsOverridden ? 'This is being overridden by the `DUB_SECTIONS` environment variable.' | t('dub') : null,
+            }) }}
+            {% endif %}
+        {% endnamespace %}
+    </div>
+
+    <div id="dub-sidebar" class="hidden" role="tabpanel" aria-labelledby="tab-dub-sidebar">
+        {% namespace 'settings' %}
+            {{ forms.lightswitchField({
+                label: 'Show click count' | t('dub'),
+                id: 'showClicks',
+                name: 'showClicks',
+                on: settings.showClicks,
+                errors: settings.getErrors('showClicks'),
+                instructions: 'Display a read-only click count in the entry sidebar.' | t('dub'),
+            }) }}
+
+            <hr>
+            {{ forms.selectField({
+                label: 'QR code display' | t('dub'),
+                id: 'qrViewMode',
+                name: 'qrViewMode',
+                value: settings.qrViewMode,
+                options: [
+                    { label: 'None' | t('dub'), value: 'none' },
+                    { label: 'Icon' | t('dub'), value: 'icon' },
+                    { label: 'Full' | t('dub'), value: 'full' },
+                ],
+                errors: settings.getErrors('qrViewMode'),
+                instructions: 'How the QR code appears in the entry sidebar. <strong>None</strong> hides it, <strong>Icon</strong> adds a small QR icon to the link row, and <strong>Full</strong> shows the QR image.' | t('dub'),
+            }) }}
+
+            {{ forms.editableTableField({
+                label: 'QR code style' | t('dub'),
+                instructions: 'Styling applied to QR codes shown in the sidebar and output by `dubQr()`.' | t('dub'),
+                id: 'qrStyle',
+                name: 'qrStyle',
+                cols: {
+                    size: { heading: 'Size' | t('dub'), type: 'number', width: 70, info: 'Minimum `600`. Defaults to `1200` if blank.' | t('dub') },
+                    margin: { heading: 'Margin' | t('dub'), type: 'number', width: 70, info: 'Maximum `20`. Defaults to `2` if blank.' | t('dub') },
+                    foreground: { heading: 'Foreground' | t('dub'), type: 'color', width: 120, info: 'Defaults to `#000000` if blank.' | t('dub') },
+                    background: { heading: 'Background' | t('dub'), type: 'color', width: '100%', info: 'Defaults to `#ffffff` if blank.' | t('dub') },
+                },
+                rows: settings.qrStyle,
+                minRows: 1,
+                maxRows: 1,
+                allowAdd: false,
+                allowDelete: false,
+                allowReorder: false,
+                errors: settings.getErrors('qrStyle'),
+            }) }}
+        {% endnamespace %}
+    </div>
+{% endblock %}

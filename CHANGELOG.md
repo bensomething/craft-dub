@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 - 2026-07-18
+
+### Added
+- **QR codes.** A short link's QR code can now be shown in the entry sidebar. Choose **None**, **Icon** (a small QR icon in the link row), or **Full** (the QR image) under the new **Sidebar** settings tab.
+- **QR code style** setting (size, margin, foreground/background colour) applied to sidebar QR codes and `dubQr()`. Blank values fall back to defaults.
+- `dubQr(entry)` Twig function for outputting a short link's QR code image in templates.
+- **Click counts.** An optional read-only click count in the entry sidebar, toggled by **Show click count** in settings (off by default).
+
+### Changed
+- Plugin settings are now organised into **General** and **Sidebar** tabs.
+
+### Fixed
+- The short link destination now resolves from the entry's final URL, so it's correct on a new entry's first save and when the slug changes in the same save (previously it could be missing or lag a save behind).
+- Pending link state is now tracked per entry and site, so multi-site propagation and nested `resave` saves no longer clobber each other.
+- The **Short Link** section now appears for Singles (such as a home single) whose sidebar has no other fields.
+- The **Open in Dub** admin icon no longer disappears after the cache is cleared.
+
 ## 1.1.0 - 2026-07-10
 
 ### Added
