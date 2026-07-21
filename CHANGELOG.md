@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A **Download** button in the QR code modal, which saves the QR as `qr-<slug>.png`.
+
+### Changed
+- Sidebar QR codes (both **Icon** and **Full** modes) now open in a modal rather than a new tab. Modifier-clicking still opens the image in a new tab, and the link falls back to its old behaviour if JavaScript is unavailable.
+
+### Fixed
+- The **Short Link** section is now placed correctly in the entry sidebar when another plugin adds its own fields.
+
 ## 1.2.0 - 2026-07-18
 
 ### Added

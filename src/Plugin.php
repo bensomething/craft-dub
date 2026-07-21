@@ -234,17 +234,25 @@ class Plugin extends BasePlugin
         // Prefer just before the notes field. Its wrapper carries a random id, but the
         // textarea's name="notes" is stable; walk back to the enclosing `.field` wrapper
         // (the nested elements between them are `.heading`/`.input`, never `.field`).
+        // Match the wrapper by class token rather than by literal `<div class="field`:
+        // Yii sorts `id` ahead of `class`, so Craft's own rows render as
+        // `<div id="…" class="field …">` and a literal match would only ever land on
+        // hand-rolled markup from other plugins further up the sidebar.
         $notesPos = strpos($html, 'name="notes"');
         if ($notesPos !== false) {
-            $wrapperPos = strrpos(substr($html, 0, $notesPos), '<div class="field');
-            if ($wrapperPos !== false) {
+            $before = substr($html, 0, $notesPos);
+            if (preg_match_all('/<div\b[^>]*\bclass="(?:[^"]*\s)?field(?:\s[^"]*)?"/', $before, $matches, PREG_OFFSET_CAPTURE)) {
+                $wrapperPos = end($matches[0])[1];
                 return substr($html, 0, $wrapperPos) . $row . substr($html, $wrapperPos);
             }
         }
 
         // No notes field (e.g. a revision): sit above the first metadata fieldset instead.
-        if (str_contains($html, '<fieldset>')) {
-            return preg_replace('/<fieldset>/', $row . '<fieldset>', $html, 1);
+        // Spliced by offset rather than preg_replace, since $row contains JS with `$`
+        // sequences that would be read as backreferences in a replacement string.
+        $fieldsetPos = strpos($html, '<fieldset>');
+        if ($fieldsetPos !== false) {
+            return substr($html, 0, $fieldsetPos) . $row . substr($html, $fieldsetPos);
         }
 
         return $html . $row;

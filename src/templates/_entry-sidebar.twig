@@ -40,6 +40,8 @@
                         </button>
                         {% if qrUrl and qrViewMode == 'icon' %}
                             <a href="{{ qrUrl }}" target="_blank" rel="noopener"
+                                data-dub-qr="{{ 'QR code for {link}' | t('dub', { link: shortLink }) }}"
+                                data-dub-qr-file="qr-{{ currentKey }}.png"
                                 title="{{ 'View QR code' | t('dub') }}"
                                 style="display: flex; --icon-color: var(--gray-500);">
                                 <span class="cp-icon small">{{ iconSvg('qrcode') }}</span>
@@ -69,11 +71,22 @@
                 </div>
             {% endif %}
             {% if qrUrl and qrViewMode == 'full' %}
-                <div class="field">
+                <div class="field dub-qr-field">
                     <div class="heading">{{ 'QR Code' | t('dub') }}</div>
-                    <div class="input">
-                        <a href="{{ qrUrl }}" target="_blank" rel="noopener" title="{{ 'Open QR code' | t('dub') }}">
+                    <div class="input flex flex-nowrap" style="align-items: flex-start; justify-content: space-between; gap: 8px;">
+                        <a href="{{ qrUrl }}" target="_blank" rel="noopener"
+                            data-dub-qr="{{ 'QR code for {link}' | t('dub', { link: shortLink }) }}"
+                            data-dub-qr-file="qr-{{ currentKey }}.png"
+                            title="{{ 'Open QR code' | t('dub') }}">
                             <img src="{{ qrUrl }}" alt="{{ 'QR code for {link}' | t('dub', { link: shortLink }) }}" width="120" height="120" style="display: block; width: 120px; height: 120px; border: 1px solid var(--hairline-color, #eee); border-radius: 4px;">
+                        </a>
+                        <a href="{{ qrUrl }}" download="qr-{{ currentKey }}.png"
+                            data-dub-qr-download
+                            data-dub-qr-file="qr-{{ currentKey }}.png"
+                            title="{{ 'Download QR code' | t('dub') }}"
+                            aria-label="{{ 'Download QR code' | t('dub') }}"
+                            style="display: flex; --icon-color: var(--gray-500);">
+                            <span class="cp-icon small">{{ iconSvg('download') }}</span>
                         </a>
                     </div>
                 </div>
@@ -81,4 +94,184 @@
         {% endif %}
     </div>
 </fieldset>
+{% if qrUrl %}
+    {# Opens the QR code in a Garnish modal rather than a new tab. Craft's own
+       PreviewFileModal is asset-backed, and the QR is a remote Dub URL, so we
+       roll a minimal modal instead. Falls back to the anchor's href if JS or
+       Garnish is unavailable, and modifier-clicks are left alone so
+       open-in-new-tab still works.
+
+       This has to go through {% js %} rather than an inline <script>: the CP
+       loads jQuery and Garnish at the end of <body>, so a script tag sitting
+       here in the sidebar markup would run before either exists. #}
+    {% js on ready %}
+        (function () {
+            if (window.dubQrModal) {
+                return;
+            }
+            window.dubQrModal = true;
+
+            var MAX = 600;
+            var MIN = 200;
+
+            var modal = null;
+            var $img = null;
+            var filename = null;
+
+            // Dub serves the QR with `access-control-allow-origin: *`, so we can pull it
+            // down as a blob and save it. A plain `download` attribute would be ignored
+            // here, the URL being cross-origin — it'd open the PNG in a tab instead.
+            function download(url, name) {
+                fetch(url)
+                    .then(function (res) {
+                        if (!res.ok) {
+                            throw new Error(res.status);
+                        }
+                        return res.blob();
+                    })
+                    .then(function (blob) {
+                        var objectUrl = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = objectUrl;
+                        a.download = name;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        // Revoke on the next tick; doing it inline can cancel the
+                        // download in some browsers.
+                        setTimeout(function () {
+                            URL.revokeObjectURL(objectUrl);
+                        }, 0);
+                    })
+                    .catch(function () {
+                        window.open(url, '_blank', 'noopener');
+                    });
+            }
+
+            $(document).on('click', 'a[data-dub-qr-download]', function (ev) {
+                if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
+                    return;
+                }
+                ev.preventDefault();
+                download(this.href, this.getAttribute('data-dub-qr-file') || 'qr-code.png');
+            });
+
+            // The modal is a plain square: the QR fills it, and the download button sits
+            // over the top-right corner. Sized against whichever viewport axis is tighter.
+            //
+            // The size is pinned in CSS via --dub-qr-size rather than left to Garnish's
+            // own shrink-wrap measurement, which the CP's `.modal { width: calc(15rem…) }`
+            // rule pulls wide. desiredWidth/Height are set to the same number so that
+            // updateSizeAndPosition() centres against the size we actually render.
+            function resize() {
+                if (!modal) {
+                    return;
+                }
+                var limit = Math.min($(window).width(), $(window).height()) - 40;
+                var size = Math.max(MIN, Math.min(MAX, Math.floor(limit)));
+                modal.$container.css('--dub-qr-size', size + 'px');
+                modal.desiredWidth = size;
+                modal.desiredHeight = size;
+                modal.updateSizeAndPosition();
+            }
+
+            $(document).on('click', 'a[data-dub-qr]', function (ev) {
+                if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
+                    return;
+                }
+                if (typeof Garnish === 'undefined' || typeof Garnish.Modal === 'undefined') {
+                    return;
+                }
+
+                ev.preventDefault();
+
+                var label = this.getAttribute('data-dub-qr');
+
+                if (!modal) {
+                    // Garnish.addModalAttributes() sets role/aria-modal for us.
+                    var $container = $('<div class="modal dub-qr-modal"/>').appendTo(Garnish.$bod);
+                    var $body = $('<div class="body"/>').appendTo($container);
+                    $img = $('<img alt=""/>').appendTo($body);
+                    var $download = $('<button type="button" class="btn dub-qr-download" data-icon="download"/>')
+                        .attr('title', Craft.t('app', 'Download'))
+                        .attr('aria-label', Craft.t('app', 'Download'))
+                        .appendTo($body);
+
+                    modal = new Garnish.Modal($container, {
+                        autoShow: false,
+                        resizable: false,
+                    });
+
+                    $download.on('click', function () {
+                        download($img.attr('src'), filename);
+                    });
+
+                    Garnish.$win.on('resize', resize);
+                }
+
+                filename = this.getAttribute('data-dub-qr-file') || 'qr-code.png';
+                $img.attr('src', this.href).attr('alt', label);
+                modal.$container.attr('aria-label', label);
+                modal.settings.triggerElement = this;
+                resize();
+                modal.show();
+            });
+        })();
+    {% endjs %}
+    {% css %}
+        /* The meta rows centre their cells by default, which leaves "QR Code" floating
+           beside a tall image. The cells still stretch to the full row height — that's
+           what keeps the divider beside the label running the whole way down — and it's
+           their *contents* that get pulled to the top. Covers both layout modes the CP
+           might be using: the align-* pair applies under flex, vertical-align under
+           table-cell. */
+        .dub-qr-field { align-items: stretch; }
+        .dub-qr-field > .heading,
+        .dub-qr-field > .input {
+            align-self: stretch;
+            align-items: flex-start;
+            vertical-align: top;
+        }
+
+        /* !important so these beat the inline width/height Garnish writes on every
+           updateSizeAndPosition(); JS keeps --dub-qr-size in step with what it centres on. */
+        .dub-qr-modal {
+            width: var(--dub-qr-size, 300px) !important;
+            height: var(--dub-qr-size, 300px) !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+        }
+        .dub-qr-modal .body {
+            padding: 0;
+            position: relative;
+            height: 100%;
+        }
+        .dub-qr-modal img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            /* The QR is square; guard against a non-square source stretching it. */
+            object-fit: contain;
+        }
+        /* Hidden until the modal is hovered, but solid rather than see-through when it
+           is — Craft's .btn background is translucent, which reads badly over a QR.
+           Kept focusable throughout so it's still reachable by keyboard. */
+        .dub-qr-modal .dub-qr-download {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background-color: var(--modal-bg);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            transition: opacity 0.1s ease-in-out;
+        }
+        .dub-qr-modal:hover .dub-qr-download,
+        .dub-qr-modal .dub-qr-download:focus-visible {
+            opacity: 1;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .dub-qr-modal .dub-qr-download { transition: none; }
+        }
+    {% endcss %}
+{% endif %}
 {% endif %}
