@@ -12,6 +12,12 @@ use GuzzleHttp\Exception\ClientException;
 use Throwable;
 use yii\base\Component;
 
+/**
+ * @phpstan-type EntryCandidate array{id: int|null, uid: string|null, siteId: int, title: string|null}
+ * @phpstan-type PathMap array<string, list<EntryCandidate>>
+ * @phpstan-type Rewrites list<array{0: string, 1: string}>
+ * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
+ */
 class DubService extends Component
 {
     private const API_BASE = 'https://api.dub.co';
@@ -21,7 +27,7 @@ class DubService extends Component
     private ?string $lastError = null;
     private ?Client $client = null;
 
-    /** @var array<string,array> Cached API results awaiting commit, keyed by entry uid + site. */
+    /** @var array<string,array<string,mixed>> Cached API results awaiting commit, keyed by entry uid + site. */
     private array $pendingLinks = [];
 
     /** @var array<string,Entry> Entries scheduled for deletion, keyed by entry uid + site. */
@@ -168,6 +174,9 @@ class DubService extends Component
         DubLink::deleteAll(['entryId' => $entry->id]);
     }
 
+    /**
+     * @return list<array{slug?: string}> The workspace's domains as returned by Dub.
+     */
     public function getDomains(): array
     {
         $result = $this->makeRequest('GET', '/domains');
@@ -208,6 +217,8 @@ class DubService extends Component
 
     /**
      * Caches the workspace id from an API link payload (if present) and returns it.
+     *
+     * @param array<string,mixed>|null $link
      */
     private function rememberWorkspaceId(?array $link): ?string
     {
@@ -289,11 +300,11 @@ class DubService extends Component
      * no "look up a link by destination URL" endpoint, so we map from the Craft side.
      *
      * @param bool $dryRun When true, reports what would happen without touching the API or DB.
-     * @param array<array{0:string,1:string}> $rewrites Prefix [from, to] pairs applied to a link's
+     * @param Rewrites $rewrites Prefix [from, to] pairs applied to a link's
      *   destination path as a fallback when the raw path matches no entry (e.g. ['/areas-stages/', '/venues/']).
-     * @param callable|null $onResult Invoked per link as ($status, $message); $status is one
+     * @param callable(string, string): void|null $onResult Invoked per link as ($status, $message); $status is one
      *   of: adopted, skipped, ambiguous, unmatched, error.
-     * @return array{adopted:int,skipped:int,ambiguous:int,unmatched:array<string>,failed:int,error:?string}
+     * @return AdoptSummary
      */
     public function adoptLinks(bool $dryRun = false, array $rewrites = [], ?callable $onResult = null): array
     {
@@ -352,6 +363,13 @@ class DubService extends Component
 
     /**
      * Matches a single Dub link to an entry and adopts it. Mutates $summary in place.
+     *
+     * @param array<string,mixed> $link
+     * @param PathMap $pathMap
+     * @param Rewrites $rewrites
+     * @param AdoptSummary $summary
+     * @param callable(string, string): void|null $onResult
+     * @param-out AdoptSummary $summary
      */
     private function adoptOne(array $link, array $pathMap, array $rewrites, bool $dryRun, array &$summary, ?callable $onResult): void
     {
@@ -413,7 +431,9 @@ class DubService extends Component
      * Returns the entry candidates for a destination path, trying the raw path first and
      * falling back to each prefix rewrite (e.g. /areas-stages/ => /venues/) in turn.
      *
-     * @param array<array{0:string,1:string}> $rewrites
+     * @param PathMap $pathMap
+     * @param Rewrites $rewrites
+     * @return list<EntryCandidate>
      */
     private function matchCandidates(string $path, array $pathMap, array $rewrites): array
     {
@@ -458,6 +478,15 @@ class DubService extends Component
         }
     }
 
+    /**
+     * Overrides the HTTP client used for Dub API calls. Only useful for swapping in a
+     * mock handler under test — in normal use the client is built lazily from the settings.
+     */
+    public function setClient(?Client $client): void
+    {
+        $this->client = $client;
+    }
+
     private function getClient(): Client
     {
         if ($this->client === null) {
@@ -476,6 +505,10 @@ class DubService extends Component
     /**
      * Returns the decoded response body, or null on failure.
      * Sets $this->lastError for non-404 client errors.
+     *
+     * @param array<string,mixed> $body
+     * @param array<string,mixed> $query
+     * @return array<array-key,mixed>|null
      */
     private function makeRequest(string $method, string $path, array $body = [], array $query = []): ?array
     {

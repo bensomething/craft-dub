@@ -35,6 +35,9 @@ class AdoptController extends Controller
         return array_merge(parent::options($actionID), ['dryRun', 'rewrite']);
     }
 
+    /**
+     * @return array<string, string>
+     */
     public function optionAliases(): array
     {
         return array_merge(parent::optionAliases(), ['d' => 'dryRun', 'r' => 'rewrite']);

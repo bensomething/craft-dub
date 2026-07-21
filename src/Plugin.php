@@ -29,6 +29,9 @@ class Plugin extends BasePlugin
     public string $schemaVersion = '1.0.0';
     public bool $hasCpSettings = true;
 
+    /**
+     * @return array{components: array<string, class-string>}
+     */
     public static function config(): array
     {
         return [
@@ -275,6 +278,8 @@ class Plugin extends BasePlugin
     /**
      * Resolves the enabled sections: the DUB_SECTIONS env var (comma-separated section
      * handles) when set, otherwise the stored setting. Values may be '*', handles, or UIDs.
+     *
+     * @return list<string>
      */
     private function getEnabledSections(): array
     {

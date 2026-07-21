@@ -17,7 +17,14 @@ class Settings extends Model
 
     public string $apiKey = '';
     public string $domain = '';
+
+    /**
+     * Enabled section handles or UIDs, or `['*']` for all of them.
+     *
+     * @var list<string>|string
+     */
     public array|string $sections = ['*'];
+
     public string $qrViewMode = 'none';
     public bool $showClicks = false;
 
@@ -25,7 +32,11 @@ class Settings extends Model
      * QR code style, stored as a single editable-table row so it can be edited as one row of
      * columns in the CP. Read it normalised via {@see getQrStyle()} rather than directly.
      *
-     * @var array|string
+     * Typed loosely because this is raw CP input: the row is nominally
+     * `{size, margin, foreground, background}` with string-or-int cells, but a posted value
+     * can be any shape, which is why both the filter rule and {@see getQrStyle()} re-check it.
+     *
+     * @var list<mixed>|string
      */
     public array|string $qrStyle = [
         ['size' => 1200, 'margin' => 2, 'foreground' => '#000000', 'background' => '#ffffff'],
