@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-07-23
 
 ### Added
 - A **Download** button in the QR code modal, which saves the QR as `qr-<slug>.png`.
