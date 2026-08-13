@@ -3,6 +3,7 @@
 namespace bensomething\craftdub\tests\unit;
 
 use bensomething\craftdub\services\DubService;
+use bensomething\craftdub\tests\support\StubDubService;
 use craft\elements\Entry;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
@@ -47,6 +48,27 @@ class DubServiceTest extends TestCase
         return (new ReflectionMethod(DubService::class, $method))->invoke($service, ...$args);
     }
 
+    /**
+     * Returns a stubbed service whose record layer reports the given sites as linked, so the
+     * archive/delete fan-outs can be driven without a database.
+     *
+     * @param list<Response|\Throwable> $responses
+     * @param list<int> $recordedSiteIds
+     */
+    private function stub(array $responses = [], array $recordedSiteIds = []): StubDubService
+    {
+        $this->sentRequests = [];
+
+        $stack = HandlerStack::create(new MockHandler($responses));
+        $stack->push(Middleware::history($this->sentRequests));
+
+        $service = new StubDubService();
+        $service->recordedSiteIds = $recordedSiteIds;
+        $service->setClient(new Client(['base_uri' => 'https://api.dub.co', 'handler' => $stack]));
+
+        return $service;
+    }
+
     private function entry(string $uid, int $siteId): Entry
     {
         $entry = $this->createMock(Entry::class);
@@ -54,6 +76,40 @@ class DubServiceTest extends TestCase
         $entry->siteId = $siteId;
 
         return $entry;
+    }
+
+    /**
+     * As entry(), but with a canonical id — needed by anything that touches the record layer.
+     */
+    private function savedEntry(string $uid, int $siteId, int $canonicalId): Entry
+    {
+        $entry = $this->entry($uid, $siteId);
+        $entry->method('getCanonicalId')->willReturn($canonicalId);
+
+        return $entry;
+    }
+
+    /**
+     * The path of each request the mock client received, in order.
+     *
+     * @return list<string>
+     */
+    private function sentPaths(): array
+    {
+        return array_map(
+            static fn(array $sent) => $sent['request']->getUri()->getPath(),
+            $this->sentRequests,
+        );
+    }
+
+    /**
+     * The decoded JSON body of one captured request.
+     *
+     * @return array<string, mixed>
+     */
+    private function sentBody(int $index): array
+    {
+        return json_decode((string)$this->sentRequests[$index]['request']->getBody(), true) ?: [];
     }
 
     // URL normalisation
@@ -218,5 +274,108 @@ class DubServiceTest extends TestCase
     public function testGetQrUrlIsNullWithoutAnEntryId(): void
     {
         $this->assertNull($this->service()->getQrUrl(null, 1));
+    }
+
+    // Link teardown
+    // -------------------------------------------------------------------------
+
+    public function testClearingOneSitesSlugOnlyDeletesThatSitesLink(): void
+    {
+        // Regression: both the API call and the local delete were keyed on entryId alone, so
+        // clearing the slug on the English site destroyed the German and French links too.
+        $service = $this->stub([new Response(200, [], '{}')], [1, 2, 3]);
+
+        $service->deleteLinkForSite($this->savedEntry('abc-123', 1, 55), 1);
+
+        $this->assertSame(['/links/ext_abc-123_1'], $this->sentPaths());
+        $this->assertSame('DELETE', $this->sentRequests[0]['request']->getMethod());
+        $this->assertSame([[55, 1]], $service->forgotten);
+    }
+
+    public function testDeletingAnEntryDeletesEveryRecordedSitesLink(): void
+    {
+        $service = $this->stub(array_fill(0, 3, new Response(200, [], '{}')), [1, 2, 3]);
+
+        $service->deleteLink($this->savedEntry('abc-123', 1, 55));
+
+        $this->assertSame(
+            ['/links/ext_abc-123_1', '/links/ext_abc-123_2', '/links/ext_abc-123_3'],
+            $this->sentPaths(),
+        );
+        $this->assertSame([[55, null]], $service->forgotten);
+    }
+
+    public function testDeletingASiteWithNoRecordedLinkMakesNoApiCall(): void
+    {
+        $service = $this->stub([], [2]);
+
+        $service->deleteLinkForSite($this->savedEntry('abc-123', 1, 55), 1);
+
+        $this->assertSame([], $this->sentPaths());
+    }
+
+    public function testLocalRecordsAreForgottenEvenWithoutAnApiKey(): void
+    {
+        $service = $this->stub([], [1]);
+        $service->stubApiKey = null;
+
+        $service->deleteLink($this->savedEntry('abc-123', 1, 55));
+
+        $this->assertSame([], $this->sentPaths());
+        $this->assertSame([[55, null]], $service->forgotten);
+    }
+
+    public function testTrashingAnEntryArchivesEverySitesLinkRatherThanDeletingIt(): void
+    {
+        // Regression: the trash branch was dead code (Craft sets dateDeleted before firing
+        // afterDelete), so a reversible trash issued a real DELETE to Dub.
+        $service = $this->stub(array_fill(0, 2, new Response(200, [], '{}')), [1, 2]);
+
+        $service->deactivateLinks($this->savedEntry('abc-123', 1, 55));
+
+        $this->assertSame(['/links/ext_abc-123_1', '/links/ext_abc-123_2'], $this->sentPaths());
+        $this->assertSame('PATCH', $this->sentRequests[0]['request']->getMethod());
+        $this->assertTrue($this->sentBody(0)['archived']);
+        $this->assertSame([], $service->forgotten);
+    }
+
+    public function testRestoringAnEntryUnarchivesTheLinksForTheSitesItCameBackLiveOn(): void
+    {
+        $service = $this->stub(array_fill(0, 2, new Response(200, [], '{}')), [1, 2]);
+
+        $service->restoreLinks($this->savedEntry('abc-123', 1, 55), [1, 2]);
+
+        $this->assertSame(['/links/ext_abc-123_1', '/links/ext_abc-123_2'], $this->sentPaths());
+        $this->assertFalse($this->sentBody(0)['archived']);
+        $this->assertFalse($this->sentBody(1)['archived']);
+    }
+
+    public function testRestoringLeavesASiteTheEntryIsStillDisabledOnArchived(): void
+    {
+        $service = $this->stub([new Response(200, [], '{}')], [1, 2]);
+
+        $service->restoreLinks($this->savedEntry('abc-123', 1, 55), [1]);
+
+        $this->assertSame(['/links/ext_abc-123_1'], $this->sentPaths());
+    }
+
+    public function testDeactivatingOnlyTouchesTheEntrysOwnSite(): void
+    {
+        $service = $this->stub([new Response(200, [], '{}')], [1, 2]);
+
+        $service->deactivateLink($this->savedEntry('abc-123', 2, 55));
+
+        $this->assertSame(['/links/ext_abc-123_2'], $this->sentPaths());
+    }
+
+    public function testDeactivatingAnEntryWithNoRecordedLinkMakesNoApiCall(): void
+    {
+        // Otherwise every save of every non-live entry costs a blocking round-trip that can
+        // only 404, since `sections` defaults to all of them.
+        $service = $this->stub([], []);
+
+        $service->deactivateLink($this->savedEntry('abc-123', 1, 55));
+
+        $this->assertSame([], $this->sentPaths());
     }
 }

@@ -58,7 +58,8 @@ class DubService extends Component
     {
         $key = $this->pendingKey($entry);
         if (isset($this->pendingDeletes[$key])) {
-            $this->deleteLink($this->pendingDeletes[$key]);
+            $pending = $this->pendingDeletes[$key];
+            $this->deleteLinkForSite($pending, $pending->siteId);
             unset($this->pendingDeletes[$key]);
         }
     }
@@ -154,24 +155,109 @@ class DubService extends Component
         }
     }
 
+    /**
+     * Archives the entry's link for its own site. Used when an entry stops being live.
+     */
     public function deactivateLink(Entry $entry): void
     {
-        $settings = Plugin::getInstance()->getSettings();
-        if (Craft::parseEnv($settings->apiKey)) {
-            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid . '_' . $entry->siteId, ['archived' => true]);
+        $this->setArchived($entry, [$entry->siteId], true);
+    }
+
+    /**
+     * Archives every site's link for the entry. Used when an entry is trashed — that's
+     * reversible, so the links are archived rather than deleted and restoreLinks() brings
+     * them back if the entry does.
+     */
+    public function deactivateLinks(Entry $entry): void
+    {
+        $this->setArchived($entry, null, true);
+    }
+
+    /**
+     * Un-archives the entry's links for the given sites, reversing deactivateLinks().
+     *
+     * The caller passes the sites explicitly because a restored entry keeps whatever enabled
+     * state each site had when it was trashed — the ones it comes back disabled on should
+     * stay archived.
+     *
+     * @param list<int> $siteIds
+     */
+    public function restoreLinks(Entry $entry, array $siteIds): void
+    {
+        $this->setArchived($entry, $siteIds, false);
+    }
+
+    /**
+     * Deletes the entry's link for one site, from Dub and locally. This is the cleared-slug
+     * path, so it must stay scoped: the other sites' links are separate links.
+     */
+    public function deleteLinkForSite(Entry $entry, int $siteId): void
+    {
+        $this->removeLinks($entry, $siteId);
+    }
+
+    /**
+     * Deletes every site's link for the entry, from Dub and locally. Only correct for a hard
+     * delete — see the EVENT_AFTER_DELETE handler.
+     */
+    public function deleteLink(Entry $entry): void
+    {
+        $this->removeLinks($entry, null);
+    }
+
+    /**
+     * Flips the archived flag on the entry's links, for the given sites or (with a null
+     * $siteIds) all of them. Sites with no recorded link are skipped rather than PATCHed
+     * blindly: the call would only 404, and with the default `sections` setting that would
+     * mean an HTTP round-trip on every save of every non-live entry on the site.
+     *
+     * @param list<int>|null $siteIds
+     */
+    private function setArchived(Entry $entry, ?array $siteIds, bool $archived): void
+    {
+        $entryId = $entry->getCanonicalId();
+        if (!$entryId || !$this->apiKey()) {
+            return;
+        }
+
+        foreach ($this->targetSiteIds($entryId, $siteIds) as $target) {
+            $this->makeRequest('PATCH', '/links/ext_' . $entry->uid . '_' . $target, ['archived' => $archived]);
         }
     }
 
-    public function deleteLink(Entry $entry): void
+    /**
+     * Deletes the entry's links, for one site or (with a null $siteId) all of them. The local
+     * records go regardless of whether the API calls could be made, so an unconfigured or
+     * failing API key can't leave rows pointing at links the CP will keep rendering.
+     */
+    private function removeLinks(Entry $entry, ?int $siteId): void
     {
-        $settings = Plugin::getInstance()->getSettings();
-        if (Craft::parseEnv($settings->apiKey)) {
-            $records = DubLink::findAll(['entryId' => $entry->id]);
-            foreach ($records as $record) {
-                $this->makeRequest('DELETE', '/links/ext_' . $entry->uid . '_' . $record->siteId);
+        $entryId = $entry->getCanonicalId();
+        if (!$entryId) {
+            return;
+        }
+
+        if ($this->apiKey()) {
+            foreach ($this->targetSiteIds($entryId, $siteId === null ? null : [$siteId]) as $target) {
+                $this->makeRequest('DELETE', '/links/ext_' . $entry->uid . '_' . $target);
             }
         }
-        DubLink::deleteAll(['entryId' => $entry->id]);
+
+        $this->forgetLinks($entryId, $siteId);
+    }
+
+    /**
+     * The recorded site IDs a fan-out should act on: all of them, or the intersection with
+     * the ones requested.
+     *
+     * @param list<int>|null $siteIds
+     * @return list<int>
+     */
+    private function targetSiteIds(int $entryId, ?array $siteIds): array
+    {
+        $linked = $this->linkedSiteIds($entryId);
+
+        return $siteIds === null ? $linked : array_values(array_intersect($linked, $siteIds));
     }
 
     /**
@@ -464,6 +550,51 @@ class DubService extends Component
     private function findRecord(int $entryId, int $siteId): ?DubLink
     {
         return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
+    }
+
+    /**
+     * The resolved API key, or null when the plugin isn't configured.
+     *
+     * This and the two record helpers below are the service's only Craft-app dependencies on
+     * the archive/delete paths. They're protected so the unit suite can stub them: the site
+     * scoping in those fan-outs is where the bugs were, and it's worth testing without a
+     * database behind it.
+     */
+    protected function apiKey(): ?string
+    {
+        $key = Craft::parseEnv(Plugin::getInstance()->getSettings()->apiKey);
+
+        return is_string($key) && $key !== '' ? $key : null;
+    }
+
+    /**
+     * The site IDs with a recorded link for this entry.
+     *
+     * @return list<int>
+     */
+    protected function linkedSiteIds(int $entryId): array
+    {
+        $siteIds = [];
+
+        /** @var DubLink $record */
+        foreach (DubLink::findAll(['entryId' => $entryId]) as $record) {
+            $siteIds[] = (int)$record->siteId;
+        }
+
+        return $siteIds;
+    }
+
+    /**
+     * Removes the local link records for an entry, scoped to one site when given.
+     */
+    protected function forgetLinks(int $entryId, ?int $siteId = null): void
+    {
+        $condition = ['entryId' => $entryId];
+        if ($siteId !== null) {
+            $condition['siteId'] = $siteId;
+        }
+
+        DubLink::deleteAll($condition);
     }
 
     private function saveLink(int $entryId, int $siteId, ?string $dubLinkId, string $shortLink): void

@@ -1,12 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Moving an entry to the trash no longer deletes its Dub link. The link is archived instead, and un-archived if the entry is restored, so short links and QR codes already in circulation keep working.
+- Clearing the **Short Link** slug on one site no longer deletes the other sites' links.
+- Saving a multi-site entry no longer fails when its short link key is replayed against the other sites.
+- Saving a non-live entry that has no short link no longer makes a redundant Dub API call.
+
 ## 1.3.0 - 2026-07-23
 
 ### Added
 - A **Download** button in the QR code modal, which saves the QR as `qr-<slug>.png`.
+- **Full** mode now also displays a download icon in the **QR Code** row.
 
 ### Changed
-- Sidebar QR codes (both **Icon** and **Full** modes) now open in a modal rather than a new tab. Modifier-clicking still opens the image in a new tab, and the link falls back to its old behaviour if JavaScript is unavailable.
+- Sidebar QR codes (both **Icon** and **Full** modes) now open in a modal rather than a new tab.
 
 ### Fixed
 - The **Short Link** section is now placed correctly in the entry sidebar when another plugin adds its own fields.

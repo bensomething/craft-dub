@@ -113,9 +113,12 @@ class Plugin extends BasePlugin
                 return;
             }
 
-            $isConsole = Craft::$app->getRequest()->getIsConsoleRequest();
-            $customKey = !$isConsole ? Craft::$app->getRequest()->getBodyParam('dubCustomKey') ?: null : null;
-            $shortLinkPresent = !$isConsole ? Craft::$app->getRequest()->getBodyParam('dubShortLinkPresent') : null;
+            $readsRequest = self::readsLinkFields(
+                Craft::$app->getRequest()->getIsConsoleRequest(),
+                $entry->propagating,
+            );
+            $customKey = $readsRequest ? Craft::$app->getRequest()->getBodyParam('dubCustomKey') ?: null : null;
+            $shortLinkPresent = $readsRequest ? Craft::$app->getRequest()->getBodyParam('dubShortLinkPresent') : null;
             $hasExistingLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId) !== null;
 
             // Cleared slug with existing link = schedule deletion
@@ -157,11 +160,40 @@ class Plugin extends BasePlugin
         Event::on(Entry::class, Element::EVENT_AFTER_DELETE, function(Event $event) {
             /** @var Entry $entry */
             $entry = $event->sender;
-            if ($entry->dateDeleted === null) {
-                Plugin::getInstance()->dub->deactivateLink($entry);
+
+            // Craft sets dateDeleted unconditionally just before firing this event, so it
+            // can't tell a trash from a hard delete here. $hardDelete is assigned earlier,
+            // before beforeDelete(), and is the only reliable signal. Reading dateDeleted
+            // instead meant every trash took the delete branch, and trashing an entry — a
+            // reversible action — destroyed its Dub link and every QR code pointing at it.
+            if (!$entry->hardDelete) {
+                Plugin::getInstance()->dub->deactivateLinks($entry);
                 return;
             }
+
             Plugin::getInstance()->dub->deleteLink($entry);
+        });
+
+        Event::on(Entry::class, Element::EVENT_AFTER_RESTORE, function(Event $event) {
+            /** @var Entry $entry */
+            $entry = $event->sender;
+
+            $entryId = $entry->getCanonicalId();
+            if (!$entryId) {
+                return;
+            }
+
+            // afterRestore() fires once for the entry, not once per site, so the other sites'
+            // links have to be found here. Only the sites it comes back live on are
+            // un-archived — a site it's still disabled on stays archived, matching what the
+            // after-save handler would do. Craft resets $entry->trashed after this event, so
+            // the status has to come from a fresh query rather than the sender.
+            $liveSiteIds = [];
+            foreach (Entry::find()->id($entryId)->siteId('*')->status(Entry::STATUS_LIVE)->all() as $siteEntry) {
+                $liveSiteIds[] = $siteEntry->siteId;
+            }
+
+            Plugin::getInstance()->dub->restoreLinks($entry, $liveSiteIds);
         });
 
         Event::on(Entry::class, Element::EVENT_DEFINE_SIDEBAR_HTML, function(DefineHtmlEvent $event) {
@@ -221,6 +253,21 @@ class Plugin extends BasePlugin
             ]);
             $event->html = $this->injectSidebarRow($event->html, $row);
         });
+    }
+
+    /**
+     * Whether the Dub form fields in the request body apply to this save.
+     *
+     * They don't on a console save, which has no request behind it. And they don't on a
+     * propagated site element: propagation re-enters the before-save handler inside the same
+     * request, so the params are still readable, but they describe the site the editor was
+     * actually on. Reusing the custom key would PATCH this site's link with a key Dub has
+     * already assigned to the originating site on the same domain, and the resulting 4xx
+     * fails the entire entry save through Craft's cross-site validation.
+     */
+    private static function readsLinkFields(bool $isConsoleRequest, bool $isPropagating): bool
+    {
+        return !$isConsoleRequest && !$isPropagating;
     }
 
     /**
