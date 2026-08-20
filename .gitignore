@@ -3,3 +3,6 @@ vendor/
 composer.lock
 .claude/
 .DS_Store
+
+# Local only: manual test notes and reference snapshots. Never committed.
+.local/
