@@ -136,66 +136,143 @@ class DubServiceTest extends TestCase
         ];
     }
 
+    #[DataProvider('urlHostProvider')]
+    public function testUrlHostNormalisesForMatching(string $url, string $expected): void
+    {
+        $this->assertSame($expected, $this->invokePrivate($this->service(), 'urlHost', $url));
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function urlHostProvider(): array
+    {
+        return [
+            'plain host' => ['https://example.com/news', 'example.com'],
+            'drops www' => ['https://www.example.com/news', 'example.com'],
+            'lowercases' => ['https://Example.COM/news', 'example.com'],
+            'keeps a subdomain that is not www' => ['https://fr.example.com/news', 'fr.example.com'],
+            'keeps a host that merely starts with www' => ['https://wwwfoo.example.com/news', 'wwwfoo.example.com'],
+            'no host at all' => ['/news/hello', ''],
+        ];
+    }
+
     // Candidate matching
     // -------------------------------------------------------------------------
 
-    public function testMatchCandidatesPrefersTheRawPath(): void
+    public function testMatchCandidatesPrefersTheHostAndPathTogether(): void
     {
-        $pathMap = ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]];
+        $maps = [
+            'url' => [
+                'example.com/news' => [['id' => 1, 'siteId' => 1]],
+                'example.fr/news' => [['id' => 2, 'siteId' => 2]],
+            ],
+            'path' => ['/news' => [['id' => 1, 'siteId' => 1], ['id' => 2, 'siteId' => 2]]],
+        ];
+
+        // Matching on path alone reported this pair as ambiguous and adopted neither.
+        $this->assertSame(
+            $maps['url']['example.fr/news'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.fr/news', $maps, []),
+        );
+    }
+
+    public function testMatchCandidatesIgnoresWwwWhenComparingHosts(): void
+    {
+        $maps = ['url' => ['example.com/news' => [['id' => 1, 'siteId' => 1]]], 'path' => []];
 
         $this->assertSame(
-            $pathMap['/venues/pyramid'],
-            $this->invokePrivate($this->service(), 'matchCandidates', '/venues/pyramid', $pathMap, []),
+            $maps['url']['example.com/news'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://www.example.com/news', $maps, []),
+        );
+    }
+
+    public function testMatchCandidatesFallsBackToThePathWhenTheHostIsUnknown(): void
+    {
+        // A link recorded against a staging hostname still matches the entry it points at.
+        $maps = ['url' => ['example.com/news' => [['id' => 1, 'siteId' => 1]]], 'path' => ['/news' => [['id' => 1, 'siteId' => 1]]]];
+
+        $this->assertSame(
+            $maps['path']['/news'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://staging.example.test/news', $maps, []),
+        );
+    }
+
+    public function testMatchCandidatesPrefersTheRawPath(): void
+    {
+        $maps = ['url' => [], 'path' => ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]]];
+
+        $this->assertSame(
+            $maps['path']['/venues/pyramid'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/venues/pyramid', $maps, []),
         );
     }
 
     public function testMatchCandidatesFallsBackToAPrefixRewrite(): void
     {
-        $pathMap = ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]];
+        $maps = ['url' => [], 'path' => ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]]];
         $rewrites = [['/areas-stages/', '/venues/']];
 
         $this->assertSame(
-            $pathMap['/venues/pyramid'],
-            $this->invokePrivate($this->service(), 'matchCandidates', '/areas-stages/pyramid', $pathMap, $rewrites),
+            $maps['path']['/venues/pyramid'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/areas-stages/pyramid', $maps, $rewrites),
+        );
+    }
+
+    public function testARewriteResolvesToTheRightSiteWhenTwoShareThePath(): void
+    {
+        $maps = [
+            'url' => [
+                'example.com/venues/pyramid' => [['id' => 1, 'siteId' => 1]],
+                'example.fr/venues/pyramid' => [['id' => 2, 'siteId' => 2]],
+            ],
+            'path' => ['/venues/pyramid' => [['id' => 1, 'siteId' => 1], ['id' => 2, 'siteId' => 2]]],
+        ];
+        $rewrites = [['/areas-stages/', '/venues/']];
+
+        $this->assertSame(
+            $maps['url']['example.fr/venues/pyramid'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.fr/areas-stages/pyramid', $maps, $rewrites),
         );
     }
 
     public function testMatchCandidatesTriesEachRewriteInTurn(): void
     {
-        $pathMap = ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]];
+        $maps = ['url' => [], 'path' => ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]]];
         $rewrites = [['/stages/', '/nowhere/'], ['/areas-stages/', '/venues/']];
 
         $this->assertNotEmpty(
-            $this->invokePrivate($this->service(), 'matchCandidates', '/areas-stages/pyramid', $pathMap, $rewrites),
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/areas-stages/pyramid', $maps, $rewrites),
         );
     }
 
     public function testARewriteThatLandsNowhereDoesNotMatch(): void
     {
-        $pathMap = ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]];
+        $maps = ['url' => [], 'path' => ['/venues/pyramid' => [['id' => 1, 'siteId' => 1]]]];
         $rewrites = [['/areas-stages/', '/places/']];
 
         $this->assertSame(
             [],
-            $this->invokePrivate($this->service(), 'matchCandidates', '/areas-stages/pyramid', $pathMap, $rewrites),
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/areas-stages/pyramid', $maps, $rewrites),
         );
     }
 
-    public function testAPathSharedByTwoSitesReturnsBothCandidates(): void
+    public function testAPathSharedByTwoSitesOnOneHostStillReturnsBothCandidates(): void
     {
-        $pathMap = ['/news' => [['id' => 1, 'siteId' => 1], ['id' => 2, 'siteId' => 2]]];
+        // Nothing distinguishes these, so adoption should still decline to guess.
+        $maps = ['url' => [], 'path' => ['/news' => [['id' => 1, 'siteId' => 1], ['id' => 2, 'siteId' => 2]]]];
 
         $this->assertCount(
             2,
-            $this->invokePrivate($this->service(), 'matchCandidates', '/news', $pathMap, []),
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/news', $maps, []),
         );
     }
 
     public function testAnUnknownPathMatchesNothing(): void
     {
+        $maps = ['url' => [], 'path' => ['/here' => [['id' => 1]]]];
+
         $this->assertSame(
             [],
-            $this->invokePrivate($this->service(), 'matchCandidates', '/gone', ['/here' => [['id' => 1]]], []),
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.com/gone', $maps, []),
         );
     }
 
@@ -377,5 +454,70 @@ class DubServiceTest extends TestCase
         $service->deactivateLink($this->savedEntry('abc-123', 1, 55));
 
         $this->assertSame([], $this->sentPaths());
+    }
+
+    public function testArchivingRecordsTheFlagAgainstEachSiteItTouched(): void
+    {
+        // The next save reads this back: without it the link stays archived at Dub, because
+        // an otherwise-unchanged save now skips the PATCH that would carry archived: false.
+        $service = $this->stub([new Response(200, [], '{}'), new Response(200, [], '{}')], [1, 2]);
+
+        $service->deactivateLinks($this->savedEntry('abc-123', 1, 55));
+
+        $this->assertSame([[55, 1, true], [55, 2, true]], $service->archivedWrites);
+    }
+
+    public function testRestoringClearsTheFlagOnTheSitesItBroughtBack(): void
+    {
+        $service = $this->stub([new Response(200, [], '{}')], [1, 2]);
+
+        $service->restoreLinks($this->savedEntry('abc-123', 1, 55), [1]);
+
+        $this->assertSame([[55, 1, false]], $service->archivedWrites);
+    }
+
+    #[DataProvider('linkCurrencyProvider')]
+    public function testAnUnchangedSaveIsRecognised(
+        ?string $recordedUrl,
+        ?string $recordedShortLink,
+        bool $recordedArchived,
+        string $url,
+        ?string $customKey,
+        ?string $domain,
+        bool $expected,
+    ): void {
+        $current = $this->invokePrivate(
+            $this->service(),
+            'linkIsCurrent',
+            $recordedUrl,
+            $recordedShortLink,
+            $recordedArchived,
+            $url,
+            $customKey,
+            $domain,
+        );
+
+        $this->assertSame($expected, $current);
+    }
+
+    /** @return array<string, array{?string, ?string, bool, string, ?string, ?string, bool}> */
+    public static function linkCurrencyProvider(): array
+    {
+        $short = 'https://go.example.com/launch';
+
+        return [
+            'nothing moved' => ['https://example.com/posts/a', $short, false, 'https://example.com/posts/a', 'launch', 'go.example.com', true],
+            'the slug changed, so the destination did' => ['https://example.com/posts/a', $short, false, 'https://example.com/posts/b', 'launch', 'go.example.com', false],
+            'the editor typed a different key' => ['https://example.com/posts/a', $short, false, 'https://example.com/posts/a', 'launch-day', 'go.example.com', false],
+            'the domain setting changed' => ['https://example.com/posts/a', $short, false, 'https://example.com/posts/a', 'launch', 'go2.example.com', false],
+            // The PATCH is what carries archived: false, so it has to go out.
+            'the link is archived and the entry is live again' => ['https://example.com/posts/a', $short, true, 'https://example.com/posts/a', 'launch', 'go.example.com', false],
+            // Written before the state columns existed: unknown, not unchanged.
+            'a row with no recorded destination' => [null, $short, false, 'https://example.com/posts/a', 'launch', 'go.example.com', false],
+            // Neither is sent when null, so Dub keeps what it has and there is nothing to compare.
+            'no custom key and no domain configured' => ['https://example.com/posts/a', $short, false, 'https://example.com/posts/a', null, null, true],
+            'an unreadable short link with no key to check' => ['https://example.com/posts/a', null, false, 'https://example.com/posts/a', null, null, true],
+            'an unreadable short link with a key to check' => ['https://example.com/posts/a', null, false, 'https://example.com/posts/a', 'launch', null, false],
+        ];
     }
 }

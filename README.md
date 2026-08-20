@@ -59,7 +59,7 @@ If your Dub workspace already contains short links for your entries — created 
 php craft dub/adopt
 ```
 
-This scans your workspace, matches each link to a Craft entry by the path of its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Links with no matching entry (or a path shared by more than one site) are left untouched.
+This scans your workspace, matches each link to a Craft entry by its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Matching uses the host and path together, so sites on separate domains or subdomains are told apart even when they share a path. Links with no matching entry — or a path shared by two sites on the same host — are left untouched.
 
 Add `--dry-run` to preview what would be adopted without making any changes:
 

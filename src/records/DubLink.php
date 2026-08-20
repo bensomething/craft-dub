@@ -10,6 +10,8 @@ use craft\db\ActiveRecord;
  * @property int $siteId
  * @property string|null $dubLinkId
  * @property string|null $shortLink
+ * @property string|null $destinationUrl
+ * @property bool $archived
  */
 class DubLink extends ActiveRecord
 {

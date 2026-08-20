@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+- Saving an entry whose short link hasn't moved no longer calls the Dub API. Resaving a section is now one request per link that actually changed, rather than one per entry per site.
+- `dub/adopt` now matches links on the host and path of their destination together, rather than the path alone, so sites on separate domains or subdomains are adopted correctly even when they share a path.
+- Uninstalling the plugin now drops its table. Dub keeps the links themselves, so `php craft dub/adopt` rebuilds the local records after a reinstall.
+
 ### Fixed
 - Moving an entry to the trash no longer deletes its Dub link. The link is archived instead, and un-archived if the entry is restored, so short links and QR codes already in circulation keep working.
 - Clearing the **Short Link** slug on one site no longer deletes the other sites' links.

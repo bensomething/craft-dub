@@ -15,6 +15,7 @@ use yii\base\Component;
 /**
  * @phpstan-type EntryCandidate array{id: int|null, uid: string|null, siteId: int, title: string|null}
  * @phpstan-type PathMap array<string, list<EntryCandidate>>
+ * @phpstan-type CandidateMaps array{url: PathMap, path: PathMap}
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
@@ -96,6 +97,11 @@ class DubService extends Component
             $optionals['domain'] = $domain;
         }
 
+        // Nothing has moved since the last save, so there's nothing to send.
+        if ($this->isLinkCurrent($entry, $url, $customKey, is_string($domain) ? $domain : null)) {
+            return null;
+        }
+
         // Try to update existing link; create if not found
         $result = $this->makeRequest('PATCH', '/links/ext_' . $externalId, array_merge(['url' => $url, 'archived' => false], $optionals));
 
@@ -128,7 +134,14 @@ class DubService extends Component
 
         if ($link && isset($link['shortLink'])) {
             $this->rememberWorkspaceId($link);
-            $this->saveLink($entry->id, $entry->siteId, $link['id'] ?? null, $link['shortLink']);
+            $this->saveLink(
+                $entry->id,
+                $entry->siteId,
+                $link['id'] ?? null,
+                $link['shortLink'],
+                is_string($link['url'] ?? null) ? $link['url'] : null,
+                (bool)($link['archived'] ?? false),
+            );
         }
 
         unset($this->pendingLinks[$key]);
@@ -222,6 +235,7 @@ class DubService extends Component
 
         foreach ($this->targetSiteIds($entryId, $siteIds) as $target) {
             $this->makeRequest('PATCH', '/links/ext_' . $entry->uid . '_' . $target, ['archived' => $archived]);
+            $this->rememberArchived($entryId, $target, $archived);
         }
     }
 
@@ -403,9 +417,13 @@ class DubService extends Component
         }
         $domain = Craft::parseEnv($settings->domain);
 
-        // Build a path => [entry candidates] map across every site. Keying by path (not
-        // full URL) keeps a match ambiguous only when two sites genuinely share a path.
-        $pathMap = [];
+        // Two maps of entry candidates across every site: one keyed by host + path, one by
+        // path alone. Host + path identifies a single site's entry even when the sites share
+        // their paths, which is what a domain- or subdomain-per-site install looks like
+        // whenever the slug isn't translated. Path alone is the fallback, and it has to stay:
+        // it's what lets --rewrite work, and what absorbs a destination recorded against a
+        // different environment's hostname.
+        $maps = ['url' => [], 'path' => []];
         foreach (Craft::$app->getSites()->getAllSites() as $site) {
             foreach (Entry::find()->siteId($site->id)->status(null)->each() as $entry) {
                 $url = $entry->getUrl();
@@ -413,8 +431,16 @@ class DubService extends Component
                     continue;
                 }
                 $path = $this->urlPath($url);
-                if ($path !== '') {
-                    $pathMap[$path][] = ['id' => $entry->id, 'uid' => $entry->uid, 'siteId' => $site->id, 'title' => $entry->title];
+                if ($path === '') {
+                    continue;
+                }
+
+                $candidate = ['id' => $entry->id, 'uid' => $entry->uid, 'siteId' => $site->id, 'title' => $entry->title];
+                $maps['path'][$path][] = $candidate;
+
+                $host = $this->urlHost($url);
+                if ($host !== '') {
+                    $maps['url'][$host . $path][] = $candidate;
                 }
             }
         }
@@ -438,7 +464,7 @@ class DubService extends Component
             }
 
             foreach ($links as $link) {
-                $this->adoptOne($link, $pathMap, $rewrites, $dryRun, $summary, $onResult);
+                $this->adoptOne($link, $maps, $rewrites, $dryRun, $summary, $onResult);
             }
 
             $page++;
@@ -451,13 +477,13 @@ class DubService extends Component
      * Matches a single Dub link to an entry and adopts it. Mutates $summary in place.
      *
      * @param array<string,mixed> $link
-     * @param PathMap $pathMap
+     * @param CandidateMaps $maps
      * @param Rewrites $rewrites
      * @param AdoptSummary $summary
      * @param callable(string, string): void|null $onResult
      * @param-out AdoptSummary $summary
      */
-    private function adoptOne(array $link, array $pathMap, array $rewrites, bool $dryRun, array &$summary, ?callable $onResult): void
+    private function adoptOne(array $link, array $maps, array $rewrites, bool $dryRun, array &$summary, ?callable $onResult): void
     {
         $dubId = $link['id'] ?? null;
         $shortLink = $link['shortLink'] ?? null;
@@ -466,7 +492,7 @@ class DubService extends Component
             return;
         }
 
-        $candidates = $this->matchCandidates($this->urlPath($destUrl), $pathMap, $rewrites);
+        $candidates = $this->matchCandidates($destUrl, $maps, $rewrites);
 
         if (empty($candidates)) {
             $summary['unmatched'][] = $shortLink . ' → ' . $destUrl;
@@ -508,31 +534,50 @@ class DubService extends Component
 
         $this->rememberWorkspaceId($link);
 
-        $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink);
+        $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink, $destUrl, (bool)($link['archived'] ?? false));
         $summary['adopted']++;
         $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
     }
 
     /**
-     * Returns the entry candidates for a destination path, trying the raw path first and
-     * falling back to each prefix rewrite (e.g. /areas-stages/ => /venues/) in turn.
+     * Returns the entry candidates for a link's destination URL.
      *
-     * @param PathMap $pathMap
+     * Host and path together are tried first: a link to example.fr/about and one to
+     * example.com/about are different links pointing at different entries, and reporting
+     * that pair as ambiguous — as matching on path alone did — left exactly the multi-site
+     * installs that need adoption most unable to use it. Path alone is the fallback, then
+     * each prefix rewrite (e.g. /areas-stages/ => /venues/) in turn, host-first again.
+     *
+     * @param CandidateMaps $maps
      * @param Rewrites $rewrites
      * @return list<EntryCandidate>
      */
-    private function matchCandidates(string $path, array $pathMap, array $rewrites): array
+    private function matchCandidates(string $destUrl, array $maps, array $rewrites): array
     {
-        if (!empty($pathMap[$path])) {
-            return $pathMap[$path];
+        $host = $this->urlHost($destUrl);
+        $path = $this->urlPath($destUrl);
+
+        if ($host !== '' && !empty($maps['url'][$host . $path])) {
+            return $maps['url'][$host . $path];
+        }
+
+        if (!empty($maps['path'][$path])) {
+            return $maps['path'][$path];
         }
 
         foreach ($rewrites as [$from, $to]) {
-            if (str_starts_with($path, $from)) {
-                $rewritten = rtrim($to . substr($path, strlen($from)), '/');
-                if (!empty($pathMap[$rewritten])) {
-                    return $pathMap[$rewritten];
-                }
+            if (!str_starts_with($path, $from)) {
+                continue;
+            }
+
+            $rewritten = rtrim($to . substr($path, strlen($from)), '/');
+
+            if ($host !== '' && !empty($maps['url'][$host . $rewritten])) {
+                return $maps['url'][$host . $rewritten];
+            }
+
+            if (!empty($maps['path'][$rewritten])) {
+                return $maps['path'][$rewritten];
             }
         }
 
@@ -547,15 +592,108 @@ class DubService extends Component
         return rtrim(strtolower(parse_url($url, PHP_URL_PATH) ?? ''), '/');
     }
 
+    /**
+     * Normalises a URL to its lowercased host, with any leading www. dropped. Both sides of
+     * a comparison go through this, so www.example.com and example.com are the same site.
+     */
+    private function urlHost(string $url): string
+    {
+        $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
+
+        return str_starts_with($host, 'www.') ? substr($host, 4) : $host;
+    }
+
     private function findRecord(int $entryId, int $siteId): ?DubLink
     {
         return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
     }
 
     /**
+     * Whether Dub already holds this link exactly as this save would leave it.
+     *
+     * The plugin used to PATCH on every save of every linked entry, so a `resave/entries`
+     * across a section was one HTTP round-trip per entry per site for links that hadn't
+     * moved. The comparison is against the local record, which only holds while that record
+     * is accurate — see linkIsCurrent() for the cases deliberately left to fall through.
+     */
+    private function isLinkCurrent(Entry $entry, string $url, ?string $customKey, ?string $domain): bool
+    {
+        $entryId = $entry->getCanonicalId();
+        $record = $entryId ? $this->findRecord($entryId, $entry->siteId) : null;
+
+        if ($record === null) {
+            return false;
+        }
+
+        return $this->linkIsCurrent(
+            $record->destinationUrl,
+            $record->shortLink,
+            (bool)$record->archived,
+            $url,
+            $customKey,
+            $domain,
+        );
+    }
+
+    /**
+     * The comparison behind isLinkCurrent(), over the recorded state rather than the record,
+     * so it can be exercised without a database.
+     *
+     * Anything unknown falls through to the PATCH rather than being assumed unchanged: a null
+     * destinationUrl means the row predates the state columns, and an archived link needs the
+     * `archived: false` the PATCH carries. A null key or domain isn't sent at all, so Dub
+     * keeps whatever it has and there is nothing to compare.
+     */
+    private function linkIsCurrent(
+        ?string $recordedUrl,
+        ?string $recordedShortLink,
+        bool $recordedArchived,
+        string $url,
+        ?string $customKey,
+        ?string $domain,
+    ): bool {
+        if ($recordedUrl === null || $recordedArchived) {
+            return false;
+        }
+
+        if ($recordedUrl !== $url) {
+            return false;
+        }
+
+        if ($customKey && $customKey !== $this->shortLinkPart($recordedShortLink, PHP_URL_PATH)) {
+            return false;
+        }
+
+        if ($domain && $domain !== $this->shortLinkPart($recordedShortLink, PHP_URL_HOST)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * The host or the key of a recorded short link, or null if it can't be read.
+     */
+    private function shortLinkPart(?string $shortLink, int $component): ?string
+    {
+        $part = $shortLink ? parse_url($shortLink, $component) : null;
+
+        return is_string($part) ? ltrim($part, '/') : null;
+    }
+
+    /**
+     * Records that the entry's link for a site has been archived or un-archived, so the next
+     * save can tell whether the `archived: false` a PATCH carries is still needed.
+     */
+    protected function rememberArchived(int $entryId, int $siteId, bool $archived): void
+    {
+        DubLink::updateAll(['archived' => $archived], ['entryId' => $entryId, 'siteId' => $siteId]);
+    }
+
+    /**
      * The resolved API key, or null when the plugin isn't configured.
      *
-     * This and the two record helpers below are the service's only Craft-app dependencies on
+     * This and the record helpers below are the service's only Craft-app dependencies on
      * the archive/delete paths. They're protected so the unit suite can stub them: the site
      * scoping in those fan-outs is where the bugs were, and it's worth testing without a
      * database behind it.
@@ -597,13 +735,21 @@ class DubService extends Component
         DubLink::deleteAll($condition);
     }
 
-    private function saveLink(int $entryId, int $siteId, ?string $dubLinkId, string $shortLink): void
-    {
+    private function saveLink(
+        int $entryId,
+        int $siteId,
+        ?string $dubLinkId,
+        string $shortLink,
+        ?string $destinationUrl = null,
+        bool $archived = false,
+    ): void {
         $record = $this->findRecord($entryId, $siteId) ?? new DubLink();
         $record->entryId = $entryId;
         $record->siteId = $siteId;
         $record->dubLinkId = $dubLinkId;
         $record->shortLink = $shortLink;
+        $record->destinationUrl = $destinationUrl;
+        $record->archived = $archived;
         if (!$record->save()) {
             Craft::error('Dub: saveLink failed – ' . json_encode($record->getErrors()), __METHOD__);
         }

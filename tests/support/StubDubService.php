@@ -21,6 +21,9 @@ class StubDubService extends DubService
     /** @var list<array{int, int|null}> Every forgetLinks() call, as [entryId, siteId]. */
     public array $forgotten = [];
 
+    /** @var list<array{int, int, bool}> Every rememberArchived() call, as [entryId, siteId, archived]. */
+    public array $archivedWrites = [];
+
     public ?string $stubApiKey = 'dub_test_key';
 
     protected function apiKey(): ?string
@@ -39,5 +42,10 @@ class StubDubService extends DubService
     protected function forgetLinks(int $entryId, ?int $siteId = null): void
     {
         $this->forgotten[] = [$entryId, $siteId];
+    }
+
+    protected function rememberArchived(int $entryId, int $siteId, bool $archived): void
+    {
+        $this->archivedWrites[] = [$entryId, $siteId, $archived];
     }
 }
