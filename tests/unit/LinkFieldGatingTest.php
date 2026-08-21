@@ -29,6 +29,36 @@ class LinkFieldGatingTest extends TestCase
         $this->assertSame($expected, $this->readsLinkFields($isConsoleRequest, $isPropagating));
     }
 
+    private function actsOnLifecycleOf(bool $isDraft, bool $isRevision): bool
+    {
+        $method = new ReflectionMethod(Plugin::class, 'actsOnLifecycleOf');
+        $method->setAccessible(true);
+
+        return $method->invoke(null, $isDraft, $isRevision);
+    }
+
+    #[DataProvider('lifecycleProvider')]
+    public function testOnlyTheCanonicalEntrysLifecycleTouchesItsLinks(
+        bool $isDraft,
+        bool $isRevision,
+        bool $expected,
+    ): void {
+        $this->assertSame($expected, $this->actsOnLifecycleOf($isDraft, $isRevision));
+    }
+
+    /** @return array<string, array{bool, bool, bool}> */
+    public static function lifecycleProvider(): array
+    {
+        return [
+            'the canonical entry' => [false, false, true],
+            // Craft hard-deletes the provisional draft after every CP save. Because the delete
+            // path resolves getCanonicalId(), acting on that cleanup deleted the entry's live
+            // Dub link and its local row moments after the save that created them.
+            'a provisional draft being cleaned up after a save' => [true, false, false],
+            'a revision being pruned' => [false, true, false],
+        ];
+    }
+
     /** @return array<string, array{bool, bool, bool}> */
     public static function gatingProvider(): array
     {

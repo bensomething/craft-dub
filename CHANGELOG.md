@@ -8,6 +8,7 @@
 - Uninstalling the plugin now drops its table. Dub keeps the links themselves, so `php craft dub/adopt` rebuilds the local records after a reinstall.
 
 ### Fixed
+- Saving an entry no longer destroys the short link it just created. Craft hard-deletes the provisional draft after every control panel save, and the delete handler acted on that cleanup as though the entry itself had been deleted — removing the link from Dub and the local record moments after the save. Drafts and revisions are now ignored on the delete and restore paths, as they already were on save.
 - Moving an entry to the trash no longer deletes its Dub link. The link is archived instead, and un-archived if the entry is restored, so short links and QR codes already in circulation keep working.
 - Clearing the **Short Link** slug on one site no longer deletes the other sites' links.
 - Saving a multi-site entry no longer fails when its short link key is replayed against the other sites.

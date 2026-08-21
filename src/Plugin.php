@@ -161,6 +161,10 @@ class Plugin extends BasePlugin
             /** @var Entry $entry */
             $entry = $event->sender;
 
+            if (!self::actsOnLifecycleOf($entry->getIsDraft(), $entry->getIsRevision())) {
+                return;
+            }
+
             // Craft sets dateDeleted unconditionally just before firing this event, so it
             // can't tell a trash from a hard delete here. $hardDelete is assigned earlier,
             // before beforeDelete(), and is the only reliable signal. Reading dateDeleted
@@ -177,6 +181,10 @@ class Plugin extends BasePlugin
         Event::on(Entry::class, Element::EVENT_AFTER_RESTORE, function(Event $event) {
             /** @var Entry $entry */
             $entry = $event->sender;
+
+            if (!self::actsOnLifecycleOf($entry->getIsDraft(), $entry->getIsRevision())) {
+                return;
+            }
 
             $entryId = $entry->getCanonicalId();
             if (!$entryId) {
@@ -253,6 +261,21 @@ class Plugin extends BasePlugin
             ]);
             $event->html = $this->injectSidebarRow($event->html, $row);
         });
+    }
+
+    /**
+     * Whether a delete or restore of this element should touch the canonical entry's links.
+     *
+     * Only the canonical entry owns a link. Drafts and revisions must be ignored, and on the
+     * delete path that is not cosmetic: Craft hard-deletes the provisional draft after every
+     * CP save, which fires afterDelete() with hardDelete = true. Since the delete path
+     * resolves getCanonicalId() — a draft's canonical id is the real entry — an unguarded
+     * handler answers that routine cleanup by deleting the entry's live Dub link and its
+     * local row, moments after the save that created them.
+     */
+    private static function actsOnLifecycleOf(bool $isDraft, bool $isRevision): bool
+    {
+        return !$isDraft && !$isRevision;
     }
 
     /**
