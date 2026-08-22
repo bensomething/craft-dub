@@ -17,7 +17,7 @@ use yii\base\Component;
  * @phpstan-type PathMap array<string, list<EntryCandidate>>
  * @phpstan-type CandidateMaps array{url: PathMap, path: PathMap}
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
- * @phpstan-type CheckSummary array{checked: int, ok: int, missing: int, drifted: int, unreadable: int, repaired: int, unrepaired: int, error: string|null}
+ * @phpstan-type CheckSummary array{checked: int, ok: int, missing: int, drifted: int, stale: int, unreadable: int, repaired: int, unrepaired: int, error: string|null}
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
 class DubService extends Component
@@ -633,6 +633,7 @@ class DubService extends Component
             'ok' => 0,
             'missing' => 0,
             'drifted' => 0,
+            'stale' => 0,
             'unreadable' => 0,
             'repaired' => 0,
             'unrepaired' => 0,
@@ -656,7 +657,17 @@ class DubService extends Component
             $status = $this->classifyRemote($remote, $this->lastError !== null, $record->shortLink, $record->destinationUrl);
 
             if ($status === 'ok') {
-                $summary['ok']++;
+                // Dub agrees with the record — but the record may itself have fallen behind
+                // Craft. Nothing above compares either against where the entry now lives, so a
+                // link can be perfectly consistent and still point somewhere the entry left.
+                $stale = $this->staleAgainstCraft($record);
+                if ($stale === null) {
+                    $summary['ok']++;
+                    continue;
+                }
+
+                $summary['stale']++;
+                $onResult && $onResult('stale', $label . ' — ' . $stale);
                 continue;
             }
 
@@ -697,6 +708,45 @@ class DubService extends Component
     {
         return ($record->shortLink ?? '#' . $record->id)
             . ' (entry ' . $record->entryId . ', site ' . $record->siteId . ')';
+    }
+
+    /**
+     * Why a record has fallen behind Craft, or null if it hasn't.
+     *
+     * Reuses the comparison a save makes: if `prepareLink()` would send something, the link is
+     * stale. That happens without anything being wrong at Dub — change a site's Base URL and
+     * every link on it points at the old host until its entry is next saved; change the Domain
+     * setting and existing links stay on the old short domain the same way.
+     *
+     * Deliberately not repaired by --fix. The repair is `php craft resave/entries`, which since
+     * change detection sends one request per link that has actually moved and stays silent for
+     * the rest. Reimplementing that here would mean two code paths deciding what a link should
+     * look like, which is how they come apart.
+     */
+    private function staleAgainstCraft(DubLink $record): ?string
+    {
+        $entry = $this->recordedEntry($record);
+        if ($entry === null) {
+            return null;
+        }
+
+        $url = $this->resolveDestinationUrl($entry);
+        if ($url === null || !$this->isAbsoluteUrl($url)) {
+            return null;
+        }
+
+        if ($record->destinationUrl !== null && $record->destinationUrl !== $url) {
+            return 'entry now at ' . $url;
+        }
+
+        $domain = Craft::parseEnv(Plugin::getInstance()->getSettings()->domain);
+        $recordedDomain = $this->shortLinkPart($record->shortLink, PHP_URL_HOST);
+
+        if (is_string($domain) && $domain !== '' && $recordedDomain !== null && $recordedDomain !== $domain) {
+            return 'on ' . $recordedDomain . ', but the configured domain is ' . $domain;
+        }
+
+        return null;
     }
 
     /**

@@ -61,6 +61,10 @@ class CheckController extends Controller
                     $this->stdout('~ drifted    ', Console::FG_YELLOW);
                     $this->stdout("$message\n");
                     break;
+                case 'stale':
+                    $this->stdout('· stale      ', Console::FG_YELLOW);
+                    $this->stdout("$message\n");
+                    break;
                 case 'repaired':
                     $this->stdout('✓ repaired   ', Console::FG_GREEN);
                     $this->stdout("$message\n");
@@ -81,14 +85,21 @@ class CheckController extends Controller
         // repaired appears once on each side of the arrow rather than twice in one list.
         $this->stdout("\n");
         $this->stdout(sprintf(
-            "%d %s: %d ok, %d missing, %d drifted, %d unreadable.\n",
+            "%d %s: %d ok, %d missing, %d drifted, %d stale, %d unreadable.\n",
             $summary['checked'],
             $summary['checked'] === 1 ? 'link' : 'links',
             $summary['ok'],
             $summary['missing'],
             $summary['drifted'],
+            $summary['stale'],
             $summary['unreadable'],
         ), Console::FG_CYAN);
+
+        if ($summary['stale']) {
+            // Not repaired here on purpose — see staleAgainstCraft(). resave/entries sends one
+            // request per link that has moved and nothing for the rest.
+            $this->stdout("\nStale links are fixed by saving their entries: php craft resave/entries\n");
+        }
 
         if ($this->fix) {
             $this->stdout(sprintf(
@@ -102,7 +113,7 @@ class CheckController extends Controller
 
         // Anything still unresolved is worth a non-zero exit, so this can run from cron or CI
         // without its output having to be read. A link that was repaired is resolved.
-        $unresolved = $summary['unreadable'] + ($this->fix
+        $unresolved = $summary['unreadable'] + $summary['stale'] + ($this->fix
             ? $summary['unrepaired']
             : $summary['missing'] + $summary['drifted']);
 

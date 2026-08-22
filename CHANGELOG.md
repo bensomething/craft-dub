@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- A `dub/check` console command, which verifies that every recorded short link still exists at Dub and still matches what Craft recorded. Add `--fix` to recreate links deleted from the Dub dashboard, and to reconcile ones edited there — pushing Craft's destination back, and adopting a slug renamed at Dub rather than reversing it. It exits non-zero when anything needs attention, so it can be run from cron or CI.
+- A `dub/check` console command, which verifies that every recorded short link still exists at Dub, still matches what Craft recorded, and still points where its entry actually lives. Add `--fix` to recreate links deleted from the Dub dashboard, and to reconcile ones edited there — pushing Craft's destination back, and adopting a slug renamed at Dub rather than reversing it. Links that have fallen behind Craft — after a site's Base URL or the Domain setting changes — are reported as stale, and fixed by an ordinary `php craft resave/entries`. It exits non-zero when anything needs attention, so it can be run from cron or CI.
 
 ### Changed
 - Saving an entry whose short link hasn't moved no longer calls the Dub API. Resaving a section is now one request per link that actually changed, rather than one per entry per site.

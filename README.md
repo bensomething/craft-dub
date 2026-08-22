@@ -93,6 +93,20 @@ run from cron or CI. Add `--fix` to put things back:
 php craft dub/check --fix
 ```
 
+It also reports links that have fallen behind Craft — **stale** links. A short link only moves
+when its entry is saved, so changing a site's Base URL, or the **Domain** setting, leaves
+existing links pointing at the old place until each entry is next saved. Nothing is wrong at
+Dub, which is why this is reported separately.
+
+Stale links aren't repaired by `--fix`. The repair is an ordinary resave:
+
+```
+php craft resave/entries
+```
+
+Since a save no longer re-sends a link that hasn't moved, that sends one request per link that
+has actually changed and nothing at all for the rest.
+
 `--fix` reconciles each side according to what it owns. The **destination** belongs to Craft —
 it's derived from the entry — so Craft's value is pushed back to Dub. The **slug** belongs to
 Dub: renaming a link there is deliberate, and the renamed URL is the one now in circulation, so
