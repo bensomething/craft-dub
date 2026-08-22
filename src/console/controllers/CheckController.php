@@ -77,24 +77,33 @@ class CheckController extends Controller
             return ExitCode::CONFIG;
         }
 
+        // Detections first, then what was done about them — a row that drifted and couldn't be
+        // repaired appears once on each side of the arrow rather than twice in one list.
         $this->stdout("\n");
         $this->stdout(sprintf(
-            "%d ok, %d missing, %d drifted, %d repaired, %d failed.\n",
+            "%d %s: %d ok, %d missing, %d drifted, %d unreadable.\n",
+            $summary['checked'],
+            $summary['checked'] === 1 ? 'link' : 'links',
             $summary['ok'],
             $summary['missing'],
             $summary['drifted'],
-            $summary['repaired'],
-            $summary['failed'],
+            $summary['unreadable'],
         ), Console::FG_CYAN);
 
-        if (!$this->fix && ($summary['missing'] || $summary['drifted'])) {
-            $this->stdout("\nRun with --fix to recreate the missing links and re-point the drifted ones.\n");
+        if ($this->fix) {
+            $this->stdout(sprintf(
+                "  → %d repaired, %d could not be repaired.\n",
+                $summary['repaired'],
+                $summary['unrepaired'],
+            ), Console::FG_CYAN);
+        } elseif ($summary['missing'] || $summary['drifted']) {
+            $this->stdout("\nRun with --fix to recreate the missing links and reconcile the drifted ones.\n");
         }
 
-        // A clean report is the only success. Anything left unresolved is worth a non-zero
-        // exit so this can be run from cron or CI without the output having to be read.
-        $unresolved = $summary['failed'] + ($this->fix
-            ? $summary['missing'] + $summary['drifted'] - $summary['repaired']
+        // Anything still unresolved is worth a non-zero exit, so this can run from cron or CI
+        // without its output having to be read. A link that was repaired is resolved.
+        $unresolved = $summary['unreadable'] + ($this->fix
+            ? $summary['unrepaired']
             : $summary['missing'] + $summary['drifted']);
 
         return $unresolved > 0 ? ExitCode::UNSPECIFIED_ERROR : ExitCode::OK;

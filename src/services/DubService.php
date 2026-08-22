@@ -17,7 +17,7 @@ use yii\base\Component;
  * @phpstan-type PathMap array<string, list<EntryCandidate>>
  * @phpstan-type CandidateMaps array{url: PathMap, path: PathMap}
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
- * @phpstan-type CheckSummary array{ok: int, missing: int, drifted: int, repaired: int, failed: int, error: string|null}
+ * @phpstan-type CheckSummary array{checked: int, ok: int, missing: int, drifted: int, unreadable: int, repaired: int, unrepaired: int, error: string|null}
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
 class DubService extends Component
@@ -554,7 +554,19 @@ class DubService extends Component
      */
     public function checkLinks(bool $fix = false, ?callable $onResult = null): array
     {
-        $summary = ['ok' => 0, 'missing' => 0, 'drifted' => 0, 'repaired' => 0, 'failed' => 0, 'error' => null];
+        // Detections (ok/missing/drifted/unreadable) are mutually exclusive and sum to
+        // `checked`. Outcomes (repaired/unrepaired) are a subset of missing + drifted, and only
+        // move under --fix. Keeping them apart stops one bad row being counted twice.
+        $summary = [
+            'checked' => 0,
+            'ok' => 0,
+            'missing' => 0,
+            'drifted' => 0,
+            'unreadable' => 0,
+            'repaired' => 0,
+            'unrepaired' => 0,
+            'error' => null,
+        ];
 
         if (!$this->apiKey()) {
             $summary['error'] = 'No Dub API key configured.';
@@ -563,12 +575,13 @@ class DubService extends Component
 
         /** @var DubLink $record */
         foreach (DubLink::find()->orderBy(['entryId' => SORT_ASC, 'siteId' => SORT_ASC])->all() as $record) {
-            $label = ($record->shortLink ?? '#' . $record->id) . ' (entry ' . $record->entryId . ', site ' . $record->siteId . ')';
+            $label = $this->labelFor($record);
 
             $remote = $record->dubLinkId
                 ? $this->makeRequest('GET', '/links/info', [], ['linkId' => $record->dubLinkId])
                 : $this->makeRequest('GET', '/links/info', [], ['externalId' => 'ext_' . $this->externalIdFor($record)]);
 
+            $summary['checked']++;
             $status = $this->classifyRemote($remote, $this->lastError !== null, $record->shortLink, $record->destinationUrl);
 
             if ($status === 'ok') {
@@ -577,7 +590,7 @@ class DubService extends Component
             }
 
             if ($status === 'failed') {
-                $summary['failed']++;
+                $summary['unreadable']++;
                 $onResult && $onResult('failed', $label . ' — ' . $this->lastError);
                 continue;
             }
@@ -592,16 +605,27 @@ class DubService extends Component
                 continue;
             }
 
-            if ($this->repairLink($record, $status === 'missing')) {
+            if ($this->repairLink($record, $remote)) {
                 $summary['repaired']++;
-                $onResult && $onResult('repaired', $label);
+                // Re-labelled, not reused: a reconciled link may have taken on Dub's slug, and
+                // reporting the old one would hide the very thing that changed.
+                $onResult && $onResult('repaired', $this->labelFor($record));
             } else {
-                $summary['failed']++;
+                $summary['unrepaired']++;
                 $onResult && $onResult('failed', $label . ' — ' . ($this->lastError ?? 'could not repair'));
             }
         }
 
         return $summary;
+    }
+
+    /**
+     * How one recorded link is named in the command's output.
+     */
+    private function labelFor(DubLink $record): string
+    {
+        return ($record->shortLink ?? '#' . $record->id)
+            . ' (entry ' . $record->entryId . ', site ' . $record->siteId . ')';
     }
 
     /**
@@ -637,11 +661,63 @@ class DubService extends Component
     }
 
     /**
-     * Puts Dub back in step with the record: recreates a deleted link, or re-points one that
-     * was edited at Dub. Craft is authoritative here — these links are the plugin's to manage,
-     * which is what stamping externalId on them claims.
+     * Reconciles one link, with each side owning what it actually controls.
+     *
+     * The destination belongs to Craft — it's derived from the entry, so Dub's copy of it is
+     * only ever a stale mirror, and Craft's value is pushed back.
+     *
+     * The slug belongs to Dub. Renaming a link there is a deliberate act, and the renamed URL
+     * is the one now in circulation; forcing the old one back would break whatever has been
+     * shared. It can also simply fail — if anything else has claimed the old slug in the
+     * meantime, Dub answers with a duplicate-key error and the record is stuck reporting a
+     * failure that no amount of re-running can clear. So a rename is adopted into the record
+     * rather than reversed.
+     *
+     * @param array<string, mixed>|null $remote Null when the link is gone from Dub.
      */
-    private function repairLink(DubLink $record, bool $missing): bool
+    private function repairLink(DubLink $record, ?array $remote): bool
+    {
+        return $remote === null ? $this->recreateLink($record) : $this->reconcileLink($record, $remote);
+    }
+
+    /**
+     * Takes on Dub's slug, and pushes Craft's destination if Dub's has drifted from it.
+     *
+     * @param array<string, mixed> $remote
+     */
+    private function reconcileLink(DubLink $record, array $remote): bool
+    {
+        $remoteUrl = is_string($remote['url'] ?? null) ? $remote['url'] : null;
+        $shortLink = is_string($remote['shortLink'] ?? null) ? $remote['shortLink'] : $record->shortLink;
+        $linkId = is_string($remote['id'] ?? null) ? $remote['id'] : $record->dubLinkId;
+
+        // A null recorded destination predates the state columns: nothing to push, and the
+        // next save fills it in.
+        if ($record->destinationUrl !== null && $remoteUrl !== $record->destinationUrl) {
+            $result = $this->makeRequest('PATCH', '/links/ext_' . $this->externalIdFor($record), [
+                'url' => $record->destinationUrl,
+            ]);
+
+            if (!is_array($result)) {
+                return false;
+            }
+
+            $shortLink = is_string($result['shortLink'] ?? null) ? $result['shortLink'] : $shortLink;
+            $linkId = is_string($result['id'] ?? null) ? $result['id'] : $linkId;
+        }
+
+        $record->dubLinkId = $linkId;
+        $record->shortLink = $shortLink;
+        $record->save();
+
+        return true;
+    }
+
+    /**
+     * Recreates a link that's gone from Dub, with the slug, destination and archived state the
+     * record still holds. The new link is a new link: its click history doesn't come back.
+     */
+    private function recreateLink(DubLink $record): bool
     {
         $url = $record->destinationUrl ?? $this->recordedEntryUrl($record);
         if ($url === null) {
@@ -659,12 +735,8 @@ class DubService extends Component
             $body['domain'] = $domain;
         }
 
-        if ($missing) {
-            $body['externalId'] = $this->externalIdFor($record);
-            $result = $this->makeRequest('POST', '/links', $body);
-        } else {
-            $result = $this->makeRequest('PATCH', '/links/ext_' . $this->externalIdFor($record), $body);
-        }
+        $body['externalId'] = $this->externalIdFor($record);
+        $result = $this->makeRequest('POST', '/links', $body);
 
         if (!is_array($result)) {
             return false;

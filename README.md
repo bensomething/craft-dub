@@ -87,12 +87,17 @@ php craft dub/check
 
 It reports any recorded link that's missing from Dub, or whose short link or destination has
 drifted from what Craft recorded, and exits non-zero if anything needs attention — so it can be
-run from cron or CI. Add `--fix` to recreate the missing links with their original slugs and
-re-point the drifted ones to match Craft:
+run from cron or CI. Add `--fix` to put things back:
 
 ```
 php craft dub/check --fix
 ```
+
+`--fix` reconciles each side according to what it owns. The **destination** belongs to Craft —
+it's derived from the entry — so Craft's value is pushed back to Dub. The **slug** belongs to
+Dub: renaming a link there is deliberate, and the renamed URL is the one now in circulation, so
+the rename is adopted into Craft's record rather than reversed. A link that's gone from Dub
+entirely is recreated with the slug, destination and archived state Craft still holds.
 
 A recreated link is a new link at Dub, so its click history doesn't come back — that went with
 the link when it was deleted. The short URL and destination are restored, the statistics aren't.
