@@ -17,6 +17,7 @@ use yii\base\Component;
  * @phpstan-type PathMap array<string, list<EntryCandidate>>
  * @phpstan-type CandidateMaps array{url: PathMap, path: PathMap}
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
+ * @phpstan-type CheckSummary array{ok: int, missing: int, drifted: int, repaired: int, failed: int, error: string|null}
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
 class DubService extends Component
@@ -537,6 +538,163 @@ class DubService extends Component
         $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink, $destUrl, (bool)($link['archived'] ?? false));
         $summary['adopted']++;
         $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
+    }
+
+    /**
+     * Checks every recorded link against Dub, and optionally repairs what it finds.
+     *
+     * This exists because saving an entry no longer re-sends an unchanged link. That skip is
+     * what makes a resave cheap, but it also means the plugin stops noticing when a link is
+     * deleted or edited at Dub: the local row keeps rendering a short link that no longer
+     * resolves. `dub/adopt` can't help — it walks the links Dub still has and skips entries
+     * that already have a row, so a row pointing at a deleted link is invisible to it.
+     *
+     * @param callable(string, string): void|null $onResult
+     * @return CheckSummary
+     */
+    public function checkLinks(bool $fix = false, ?callable $onResult = null): array
+    {
+        $summary = ['ok' => 0, 'missing' => 0, 'drifted' => 0, 'repaired' => 0, 'failed' => 0, 'error' => null];
+
+        if (!$this->apiKey()) {
+            $summary['error'] = 'No Dub API key configured.';
+            return $summary;
+        }
+
+        /** @var DubLink $record */
+        foreach (DubLink::find()->orderBy(['entryId' => SORT_ASC, 'siteId' => SORT_ASC])->all() as $record) {
+            $label = ($record->shortLink ?? '#' . $record->id) . ' (entry ' . $record->entryId . ', site ' . $record->siteId . ')';
+
+            $remote = $record->dubLinkId
+                ? $this->makeRequest('GET', '/links/info', [], ['linkId' => $record->dubLinkId])
+                : $this->makeRequest('GET', '/links/info', [], ['externalId' => 'ext_' . $this->externalIdFor($record)]);
+
+            $status = $this->classifyRemote($remote, $this->lastError !== null, $record->shortLink, $record->destinationUrl);
+
+            if ($status === 'ok') {
+                $summary['ok']++;
+                continue;
+            }
+
+            if ($status === 'failed') {
+                $summary['failed']++;
+                $onResult && $onResult('failed', $label . ' — ' . $this->lastError);
+                continue;
+            }
+
+            $summary[$status]++;
+            $detail = $status === 'missing'
+                ? $label . ' — gone from Dub'
+                : $label . ' — Dub has ' . ($remote['shortLink'] ?? '?') . ' → ' . ($remote['url'] ?? '?');
+            $onResult && $onResult($status, $detail);
+
+            if (!$fix) {
+                continue;
+            }
+
+            if ($this->repairLink($record, $status === 'missing')) {
+                $summary['repaired']++;
+                $onResult && $onResult('repaired', $label);
+            } else {
+                $summary['failed']++;
+                $onResult && $onResult('failed', $label . ' — ' . ($this->lastError ?? 'could not repair'));
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Decides what a lookup says about a recorded link.
+     *
+     * makeRequest() returns null both for a 404 and for a real failure, and only the latter
+     * sets lastError — so the two have to be told apart by the caller, not by the null.
+     *
+     * @param array<string, mixed>|null $remote
+     * @return 'ok'|'missing'|'drifted'|'failed'
+     */
+    private function classifyRemote(?array $remote, bool $hadError, ?string $recordedShortLink, ?string $recordedUrl): string
+    {
+        if ($hadError) {
+            return 'failed';
+        }
+
+        if ($remote === null) {
+            return 'missing';
+        }
+
+        if ($recordedShortLink !== null && ($remote['shortLink'] ?? null) !== $recordedShortLink) {
+            return 'drifted';
+        }
+
+        // A null recorded destination predates the state columns, so there's nothing to
+        // compare and nothing wrong — the next save fills it in.
+        if ($recordedUrl !== null && ($remote['url'] ?? null) !== $recordedUrl) {
+            return 'drifted';
+        }
+
+        return 'ok';
+    }
+
+    /**
+     * Puts Dub back in step with the record: recreates a deleted link, or re-points one that
+     * was edited at Dub. Craft is authoritative here — these links are the plugin's to manage,
+     * which is what stamping externalId on them claims.
+     */
+    private function repairLink(DubLink $record, bool $missing): bool
+    {
+        $url = $record->destinationUrl ?? $this->recordedEntryUrl($record);
+        if ($url === null) {
+            $this->lastError = 'no destination recorded, and the entry has no URL';
+            return false;
+        }
+
+        $body = ['url' => $url, 'archived' => (bool)$record->archived];
+        $key = $this->shortLinkPart($record->shortLink, PHP_URL_PATH);
+        $domain = $this->shortLinkPart($record->shortLink, PHP_URL_HOST);
+        if ($key !== null && $key !== '') {
+            $body['key'] = $key;
+        }
+        if ($domain !== null && $domain !== '') {
+            $body['domain'] = $domain;
+        }
+
+        if ($missing) {
+            $body['externalId'] = $this->externalIdFor($record);
+            $result = $this->makeRequest('POST', '/links', $body);
+        } else {
+            $result = $this->makeRequest('PATCH', '/links/ext_' . $this->externalIdFor($record), $body);
+        }
+
+        if (!is_array($result)) {
+            return false;
+        }
+
+        $record->dubLinkId = $result['id'] ?? $record->dubLinkId;
+        $record->shortLink = $result['shortLink'] ?? $record->shortLink;
+        $record->destinationUrl = is_string($result['url'] ?? null) ? $result['url'] : $record->destinationUrl;
+        $record->save();
+
+        return true;
+    }
+
+    /**
+     * The externalId Dub holds for a record: the entry uid plus the site, as prepareLink()
+     * builds it. Read from the entry rather than stored, so it stays a single definition.
+     */
+    private function externalIdFor(DubLink $record): string
+    {
+        return ($this->recordedEntry($record)?->uid ?? '') . '_' . $record->siteId;
+    }
+
+    private function recordedEntry(DubLink $record): ?Entry
+    {
+        return Entry::find()->id($record->entryId)->siteId($record->siteId)->status(null)->one();
+    }
+
+    private function recordedEntryUrl(DubLink $record): ?string
+    {
+        return $this->recordedEntry($record)?->getUrl();
     }
 
     /**

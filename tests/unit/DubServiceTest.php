@@ -520,4 +520,47 @@ class DubServiceTest extends TestCase
             'an unreadable short link with a key to check' => ['https://example.com/posts/a', null, false, 'https://example.com/posts/a', 'launch', null, false],
         ];
     }
+
+    // Check classification
+    // -------------------------------------------------------------------------
+
+    #[DataProvider('classifyProvider')]
+    public function testARecordedLinkIsClassifiedAgainstWhatDubReturns(
+        ?array $remote,
+        bool $hadError,
+        ?string $recordedShortLink,
+        ?string $recordedUrl,
+        string $expected,
+    ): void {
+        $this->assertSame($expected, $this->invokePrivate(
+            $this->service(),
+            'classifyRemote',
+            $remote,
+            $hadError,
+            $recordedShortLink,
+            $recordedUrl,
+        ));
+    }
+
+    /** @return array<string, array{?array<string, mixed>, bool, ?string, ?string, string}> */
+    public static function classifyProvider(): array
+    {
+        $short = 'https://bms.so/launch';
+        $url = 'https://example.com/posts/a';
+        $remote = ['shortLink' => $short, 'url' => $url];
+
+        return [
+            'still there and unchanged' => [$remote, false, $short, $url, 'ok'],
+            // makeRequest returns null for a 404 without setting lastError, which is the only
+            // thing separating "deleted at Dub" from "the API call failed".
+            'deleted at Dub' => [null, false, $short, $url, 'missing'],
+            'the API call failed' => [null, true, $short, $url, 'failed'],
+            'an error outranks a body' => [$remote, true, $short, $url, 'failed'],
+            'renamed at Dub' => [['shortLink' => 'https://bms.so/other', 'url' => $url], false, $short, $url, 'drifted'],
+            're-pointed at Dub' => [['shortLink' => $short, 'url' => 'https://example.com/posts/b'], false, $short, $url, 'drifted'],
+            // Predates the state columns: nothing recorded to compare, so nothing is wrong.
+            'no recorded destination' => [$remote, false, $short, null, 'ok'],
+            'no recorded short link' => [$remote, false, null, $url, 'ok'],
+        ];
+    }
 }

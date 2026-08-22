@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- A `dub/check` console command, which verifies that every recorded short link still exists at Dub and still matches what Craft recorded. Add `--fix` to recreate links deleted from the Dub dashboard and re-point ones edited there. It exits non-zero when anything needs attention, so it can be run from cron or CI.
+
 ### Changed
 - Saving an entry whose short link hasn't moved no longer calls the Dub API. Resaving a section is now one request per link that actually changed, rather than one per entry per site.
 - `dub/adopt` now matches links on the host and path of their destination together, rather than the path alone, so sites on separate domains or subdomains are adopted correctly even when they share a path.

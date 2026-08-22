@@ -73,6 +73,30 @@ If some of your Dub links point to an old path prefix, use `--rewrite` to remap 
 php craft dub/adopt --rewrite="/areas-stages/=/venues/"
 ```
 
+## Checking existing links
+
+Saving an entry doesn't re-send a short link that hasn't moved, which keeps a resave cheap. The
+trade-off is that the plugin won't notice if a link is deleted or edited in the Dub dashboard —
+the entry sidebar keeps showing a short link that no longer resolves.
+
+To find those:
+
+```
+php craft dub/check
+```
+
+It reports any recorded link that's missing from Dub, or whose short link or destination has
+drifted from what Craft recorded, and exits non-zero if anything needs attention — so it can be
+run from cron or CI. Add `--fix` to recreate the missing links with their original slugs and
+re-point the drifted ones to match Craft:
+
+```
+php craft dub/check --fix
+```
+
+This is the counterpart to `dub/adopt`: adoption brings links that exist at Dub under Craft's
+management, while `dub/check` looks the other way, at links Craft thinks it has.
+
 ## Templating
 
 Use the `dubLink(entry)` Twig function to output a short link in your templates:
