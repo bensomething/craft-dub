@@ -30,6 +30,22 @@ php craft plugin/install dub
 4. In the **Sections** field, choose which sections to enable short links for. Leave **All** selected to enable every section that has URLs.
 5. On the **Sidebar** tab, choose how the **QR code** appears in the entry sidebar (**None**, **Icon**, or **Full**), set its **style** (size, margin, foreground/background colour), and choose whether to **Show click count**.
 
+### Domains per site
+
+On a multi-site install the **General** tab also lists your sites, so each one can have its own
+short link domain. Leave a site blank and it uses the **Domain** above. Each field suggests your
+Dub domains and accepts an environment variable, exactly like the main one.
+
+This only affects links created or updated from then on. An existing link keeps the domain it
+was created on until its entry is next saved, so after changing a site's domain run:
+
+```
+php craft resave/entries
+```
+
+`php craft dub/check` reports the links still on the old domain as stale in the meantime, so you
+can see what is left to move.
+
 ### Setting enabled sections via environment
 
 You can override the **Sections** selection with the `DUB_SECTIONS` environment variable, a comma-separated list of section **handles**:

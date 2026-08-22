@@ -16,7 +16,25 @@ class Settings extends Model
     public const QR_MARGIN_MAX = 20;
 
     public string $apiKey = '';
+
+    /**
+     * The short link domain used by any site without an override.
+     */
     public string $domain = '';
+
+    /**
+     * Per-site domain overrides, keyed by site UID.
+     *
+     * Keyed by UID rather than site ID so the setting survives project config moving between
+     * environments, where the IDs differ.
+     *
+     * Typed loosely because this is raw CP input: the editable table posts
+     * `[uid => ['domain' => '…']]`, but a posted value can be any shape. Read it normalised
+     * via {@see getSiteDomains()} rather than directly.
+     *
+     * @var array<mixed>|string
+     */
+    public array|string $siteDomains = [];
 
     /**
      * Enabled section handles or UIDs, or `['*']` for all of them.
@@ -47,6 +65,7 @@ class Settings extends Model
         return [
             [['apiKey', 'domain'], 'string'],
             [['domain'], 'validateDomain'],
+            [['siteDomains'], 'validateSiteDomains'],
             [['qrViewMode'], 'in', 'range' => self::QR_VIEW_MODES],
             [['showClicks'], 'boolean'],
             [['sections'], 'filter', 'filter' => function($value) {
@@ -110,6 +129,68 @@ class Settings extends Model
      * references (e.g. $DUB_DOMAIN) and degrades gracefully if the domains can't be fetched
      * (no API key yet, or the API is unreachable), so setup isn't blocked.
      */
+    /**
+     * The overrides as a plain uid => domain map, with blanks and junk dropped.
+     *
+     * @return array<string, string>
+     */
+    public function getSiteDomains(): array
+    {
+        if (!is_array($this->siteDomains)) {
+            return [];
+        }
+
+        $domains = [];
+
+        foreach ($this->siteDomains as $uid => $row) {
+            // The table posts a row of cells; a value set in code may be the domain itself.
+            $domain = is_array($row) ? ($row['domain'] ?? '') : $row;
+
+            if (is_string($uid) && is_string($domain) && trim($domain) !== '') {
+                $domains[$uid] = trim($domain);
+            }
+        }
+
+        return $domains;
+    }
+
+    /**
+     * The short link domain a given site's links belong on, with environment variables resolved.
+     *
+     * Falls back to the default domain, so an install that wants one domain everywhere carries
+     * no overrides at all and behaves exactly as it did before per-site domains existed.
+     */
+    public function domainForSite(int $siteId): string
+    {
+        $site = Craft::$app->getSites()->getSiteById($siteId);
+        $override = $site !== null ? ($this->getSiteDomains()[$site->uid] ?? '') : '';
+
+        $value = Craft::parseEnv($override !== '' ? $override : $this->domain);
+
+        return is_string($value) ? $value : '';
+    }
+
+    /**
+     * Every distinct domain this install writes links to, resolved and deduplicated.
+     *
+     * Adoption pages the Dub workspace once per domain rather than scanning it unfiltered, so
+     * it never takes over links on a domain nothing here manages.
+     *
+     * @return list<string>
+     */
+    public function configuredDomains(): array
+    {
+        $domains = [Craft::parseEnv($this->domain)];
+
+        foreach ($this->getSiteDomains() as $override) {
+            $domains[] = Craft::parseEnv($override);
+        }
+
+        $domains = array_filter($domains, static fn($domain): bool => is_string($domain) && $domain !== '');
+
+        return array_values(array_unique($domains));
+    }
+
     public function validateDomain(string $attribute): void
     {
         $value = $this->$attribute;
@@ -118,13 +199,40 @@ class Settings extends Model
             return;
         }
 
-        $domains = Plugin::getInstance()->dub->getDomains();
-        if (empty($domains)) {
-            return;
-        }
-
-        if (!in_array($value, array_column($domains, 'slug'), true)) {
+        if (!$this->isAvailableDomain($value)) {
             $this->addError($attribute, Craft::t('dub', 'That domain isn’t available in your Dub workspace.'));
         }
+    }
+
+    /**
+     * Holds the overrides to the same standard as the default domain, and names the site in the
+     * error, since the table gives one row per site and an unattributed error would not say
+     * which.
+     */
+    public function validateSiteDomains(string $attribute): void
+    {
+        foreach ($this->getSiteDomains() as $uid => $domain) {
+            if (str_starts_with($domain, '$') || $this->isAvailableDomain($domain)) {
+                continue;
+            }
+
+            $site = Craft::$app->getSites()->getSiteByUid($uid);
+
+            $this->addError($attribute, Craft::t('dub', '{domain} isn’t available in your Dub workspace ({site}).', [
+                'domain' => $domain,
+                'site' => $site->name ?? $uid,
+            ]));
+        }
+    }
+
+    /**
+     * Whether Dub has this domain. Answers true when the workspace can't be read at all, so a
+     * missing or unreachable API key blocks nothing: the save is not the place to find out.
+     */
+    private function isAvailableDomain(string $domain): bool
+    {
+        $domains = Plugin::getInstance()->dub->getDomains();
+
+        return empty($domains) || in_array($domain, array_column($domains, 'slug'), true);
     }
 }

@@ -147,4 +147,49 @@ class SettingsTest extends TestCase
     {
         return array_map(fn(string $mode) => [$mode], Settings::QR_VIEW_MODES);
     }
+
+    #[DataProvider('siteDomainProvider')]
+    public function testSiteDomainOverridesAreNormalised(mixed $stored, array $expected): void
+    {
+        $settings = new Settings();
+        $settings->siteDomains = $stored;
+
+        $this->assertSame($expected, $settings->getSiteDomains());
+    }
+
+    /** @return array<string, array{mixed, array<string, string>}> */
+    public static function siteDomainProvider(): array
+    {
+        return [
+            // What the editable table posts: a row of cells under the site uid.
+            'table rows' => [
+                ['uid-a' => ['domain' => 'go.example.com'], 'uid-b' => ['domain' => 'go.example.fr']],
+                ['uid-a' => 'go.example.com', 'uid-b' => 'go.example.fr'],
+            ],
+            // What a config file is likelier to hold.
+            'plain strings' => [
+                ['uid-a' => 'go.example.com'],
+                ['uid-a' => 'go.example.com'],
+            ],
+            'blank rows are dropped, so the site falls back to the default' => [
+                ['uid-a' => ['domain' => ''], 'uid-b' => ['domain' => '   '], 'uid-c' => ['domain' => 'go.example.fr']],
+                ['uid-c' => 'go.example.fr'],
+            ],
+            'whitespace is trimmed' => [
+                ['uid-a' => ['domain' => '  go.example.com  ']],
+                ['uid-a' => 'go.example.com'],
+            ],
+            'a row with no domain cell at all' => [
+                ['uid-a' => ['site' => 'Example']],
+                [],
+            ],
+            'environment variables are kept verbatim, to resolve at read time' => [
+                ['uid-a' => ['domain' => '$DUB_DOMAIN_FR']],
+                ['uid-a' => '$DUB_DOMAIN_FR'],
+            ],
+            'no overrides' => [[], []],
+            // Raw CP input can be any shape.
+            'not an array at all' => ['nonsense', []],
+        ];
+    }
 }

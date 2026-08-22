@@ -62,7 +62,65 @@
                 suggestEnvVars: true,
                 errors: settings.getErrors('domain'),
                 instructions: 'Select the short link domain to use, or set it from an environment variable. Available domains load after saving your API key.' | t('dub'),
+                warning: allSitesOverridden
+                    ? 'Every site has its own domain below, so this one is not used.' | t('dub')
+                    : null,
             }) }}
+
+            {% if isMultiSite %}
+                {# Craft's own table chrome, but the domain cell is rendered here rather than by
+                   the table's autosuggest type. That type forwards only suggestEnvVars and
+                   suggestAliases, so it cannot offer the workspace's own domains. An `html`
+                   column emits its cell value raw, so a real autosuggest can be rendered into
+                   it with the same suggestions as the field above. It posts under its own name,
+                   so the value still comes back on save. #}
+                {% set domainRows = {} %}
+                {% for site in sites %}
+                    {% set cell %}
+                        {% include '_includes/forms/autosuggest' with {
+                            id: 'siteDomains-' ~ site.uid,
+                            name: 'siteDomains[' ~ site.uid ~ ']',
+                            value: siteDomains[site.uid] ?? '',
+                            suggestions: domainData ? [{ label: 'Domains' | t('dub'), data: domainData }] : [],
+                            suggestEnvVars: true,
+                        } only %}
+                    {% endset %}
+                    {% set domainRows = domainRows | merge({
+                        (site.uid): { site: site.name, domain: cell },
+                    }) %}
+                {% endfor %}
+
+                {# Craft's own text cells are borderless textareas filling the cell, so a td
+                   carries the padding. An autosuggest brings its own bordered input, which
+                   doubles it up. Strip the cell padding and let the input sit flush. #}
+                <style>
+                    .dub-site-domains table.editable td { padding: 0; }
+                    .dub-site-domains table.editable td .autosuggest-container .text {
+                        border: 0;
+                        border-radius: 0;
+                        box-shadow: none;
+                        background: transparent;
+                    }
+                </style>
+
+                <div class="dub-site-domains">
+                {{ forms.editableTableField({
+                    label: 'Domains per site' | t('dub'),
+                    instructions: 'Leave a site blank to use the domain above.' | t('dub'),
+                    id: 'siteDomains',
+                    name: 'siteDomains',
+                    cols: {
+                        site: { heading: 'Site' | t('dub'), type: 'heading', width: 150 },
+                        domain: { heading: 'Domain' | t('dub'), type: 'html', width: '100%' },
+                    },
+                    rows: domainRows,
+                    allowAdd: false,
+                    allowDelete: false,
+                    allowReorder: false,
+                    errors: settings.getErrors('siteDomains'),
+                }) }}
+                </div>
+            {% endif %}
 
             {% if sectionOptions %}
             <hr>

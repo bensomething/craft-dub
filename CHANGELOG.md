@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Each site on a multi-site install can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**. `dub/adopt` scans each configured domain in turn, and `dub/check` compares every link against its own site's domain.
+
 ## 1.4.0 - 2026-08-22
 
 ### Added
