@@ -207,6 +207,23 @@ class DubServiceTest extends TestCase
         );
     }
 
+    public function testAHomepageIsMatchedByHostAlone(): void
+    {
+        // A site root has no path, so it only ever lives in the url map, keyed by bare host.
+        $maps = [
+            'url' => [
+                'example.com' => [['id' => 1, 'siteId' => 1]],
+                'example.fr' => [['id' => 2, 'siteId' => 2]],
+            ],
+            'path' => [],
+        ];
+
+        $this->assertSame(
+            $maps['url']['example.fr'],
+            $this->invokePrivate($this->service(), 'matchCandidates', 'https://example.fr/', $maps, []),
+        );
+    }
+
     public function testMatchCandidatesFallsBackToThePathWhenTheHostIsUnknown(): void
     {
         // A link recorded against a staging hostname still matches the entry it points at.

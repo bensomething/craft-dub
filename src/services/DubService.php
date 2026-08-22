@@ -480,14 +480,18 @@ class DubService extends Component
                     continue;
                 }
                 $path = $this->urlPath($url);
-                if ($path === '') {
-                    continue;
+                $host = $this->urlHost($url);
+                $candidate = ['id' => $entry->id, 'uid' => $entry->uid, 'siteId' => $site->id, 'title' => $entry->title];
+
+                // A homepage's path trims to '', which is useless as a path-map key — it would
+                // match every site's homepage at once. Host and path together stay specific
+                // even then ('example.com'), so homepages go into the url map only. Without
+                // this a link pointing at a site root could never be adopted, and showed up in
+                // the report as unmatched even when it was already managed.
+                if ($path !== '') {
+                    $maps['path'][$path][] = $candidate;
                 }
 
-                $candidate = ['id' => $entry->id, 'uid' => $entry->uid, 'siteId' => $site->id, 'title' => $entry->title];
-                $maps['path'][$path][] = $candidate;
-
-                $host = $this->urlHost($url);
                 if ($host !== '') {
                     $maps['url'][$host . $path][] = $candidate;
                 }
