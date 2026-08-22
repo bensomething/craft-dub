@@ -85,6 +85,24 @@ class DubService extends Component
             return null;
         }
 
+        // Dub needs somewhere it can actually redirect to. A site whose baseUrl can't be
+        // resolved — an undefined environment variable, most often — yields a bare path here,
+        // and only outside a web request: in one, Craft falls back to the current request's
+        // host, so the same entry saves fine in the control panel and fails under a console
+        // command, a queue job or cron. Sending the path can only 4xx, and erroring would
+        // block the save, so skip it and say why.
+        if (!$this->isAbsoluteUrl($url)) {
+            Craft::warning(sprintf(
+                'Dub: skipping entry %s on site %s — its URL resolved to "%s", which is not absolute. '
+                . "Check the site's Base URL, and that any environment variable it refers to is set here.",
+                $entry->getCanonicalId() ?? 'new',
+                $entry->siteId,
+                $url,
+            ), __METHOD__);
+
+            return null;
+        }
+
         $settings = Plugin::getInstance()->getSettings();
         if (!Craft::parseEnv($settings->apiKey)) {
             return null;
@@ -850,6 +868,16 @@ class DubService extends Component
     private function urlPath(string $url): string
     {
         return rtrim(strtolower(parse_url($url, PHP_URL_PATH) ?? ''), '/');
+    }
+
+    /**
+     * Whether a URL is absolute enough for Dub to redirect to: a scheme and a host.
+     */
+    private function isAbsoluteUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+
+        return is_array($parts) && !empty($parts['scheme']) && !empty($parts['host']);
     }
 
     /**

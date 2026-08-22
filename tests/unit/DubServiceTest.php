@@ -155,6 +155,28 @@ class DubServiceTest extends TestCase
         ];
     }
 
+    #[DataProvider('absoluteUrlProvider')]
+    public function testOnlyAnAbsoluteUrlIsWorthSendingToDub(string $url, bool $expected): void
+    {
+        $this->assertSame($expected, $this->invokePrivate($this->service(), 'isAbsoluteUrl', $url));
+    }
+
+    /** @return array<string, array{string, bool}> */
+    public static function absoluteUrlProvider(): array
+    {
+        return [
+            'a full url' => ['https://example.com/news/hello', true],
+            'http is fine too' => ['http://example.com/news/hello', true],
+            'the bare homepage' => ['https://example.com/', true],
+            // What Craft returns outside a web request when the site's baseUrl can't be
+            // resolved — an undefined environment variable, usually. Sending it can only 4xx.
+            'a bare path' => ['/test/projects/test2', false],
+            'a path with no leading slash' => ['test/projects/test2', false],
+            'protocol relative, with no scheme to redirect on' => ['//example.com/news', false],
+            'empty' => ['', false],
+        ];
+    }
+
     // Candidate matching
     // -------------------------------------------------------------------------
 
