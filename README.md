@@ -53,13 +53,13 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 
 ## Adopting existing links
 
-If your Dub workspace already contains short links for your entries — created manually or before installing the plugin — you can hand them over to the plugin in one pass:
+If your Dub workspace already contains short links for your entries, created manually or before installing the plugin, you can hand them over to the plugin in one pass:
 
 ```
 php craft dub/adopt
 ```
 
-This scans your workspace, matches each link to a Craft entry by its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Matching uses the host and path together, so sites on separate domains or subdomains are told apart even when they share a path. Links with no matching entry — or a path shared by two sites on the same host — are left untouched.
+This scans your workspace, matches each link to a Craft entry by its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Matching uses the host and path together, so sites on separate domains or subdomains are told apart even when they share a path. Links are left untouched if no entry matches, or if two sites on the same host share the path.
 
 Add `--dry-run` to preview what would be adopted without making any changes:
 
@@ -76,8 +76,8 @@ php craft dub/adopt --rewrite="/areas-stages/=/venues/"
 ## Checking existing links
 
 Saving an entry doesn't re-send a short link that hasn't moved, which keeps a resave cheap. The
-trade-off is that the plugin won't notice if a link is deleted or edited in the Dub dashboard —
-the entry sidebar keeps showing a short link that no longer resolves.
+trade-off is that the plugin won't notice if a link is deleted or edited in the Dub dashboard,
+leaving the entry sidebar showing a short link that no longer resolves.
 
 To find those:
 
@@ -85,38 +85,38 @@ To find those:
 php craft dub/check
 ```
 
-It reports any recorded link that's missing from Dub, or whose short link or destination has
-drifted from what Craft recorded, and exits non-zero if anything needs attention — so it can be
-run from cron or CI. Add `--fix` to put things back:
+It reports three things, and exits non-zero if any of them turn up, so it can be run from cron
+or CI:
+
+- **missing**, meaning the link has been deleted at Dub
+- **drifted**, meaning its slug or destination was edited at Dub
+- **stale**, meaning it no longer points where its entry lives
+
+Add `--fix` to repair missing and drifted links:
 
 ```
 php craft dub/check --fix
 ```
 
-It also reports links that have fallen behind Craft — **stale** links. A short link only moves
-when its entry is saved, so changing a site's Base URL, or the **Domain** setting, leaves
-existing links pointing at the old place until each entry is next saved. Nothing is wrong at
-Dub, which is why this is reported separately.
+Each side keeps what it owns. The destination belongs to Craft, since it comes from the entry,
+so Craft's value is pushed back to Dub. The slug belongs to Dub, since renaming a link there is
+deliberate and the renamed URL is the one now in circulation, so the rename is adopted into
+Craft's record rather than reversed. A link that has gone from Dub entirely is recreated with
+the slug, destination and archived state Craft still holds. Its click history does not come
+back, because that went with the original link.
 
-Stale links aren't repaired by `--fix`. The repair is an ordinary resave:
+Stale links aren't repaired by `--fix`. A short link only moves when its entry is saved, so
+changing a site's Base URL or the **Domain** setting leaves existing links pointing at the old
+place. Nothing is wrong at Dub, and the repair is an ordinary resave:
 
 ```
 php craft resave/entries
 ```
 
 Since a save no longer re-sends a link that hasn't moved, that sends one request per link that
-has actually changed and nothing at all for the rest.
+has actually changed and nothing for the rest.
 
-`--fix` reconciles each side according to what it owns. The **destination** belongs to Craft —
-it's derived from the entry — so Craft's value is pushed back to Dub. The **slug** belongs to
-Dub: renaming a link there is deliberate, and the renamed URL is the one now in circulation, so
-the rename is adopted into Craft's record rather than reversed. A link that's gone from Dub
-entirely is recreated with the slug, destination and archived state Craft still holds.
-
-A recreated link is a new link at Dub, so its click history doesn't come back — that went with
-the link when it was deleted. The short URL and destination are restored, the statistics aren't.
-
-This is the counterpart to `dub/adopt`: adoption brings links that exist at Dub under Craft's
+This is the counterpart to `dub/adopt`. Adoption brings links that exist at Dub under Craft's
 management, while `dub/check` looks the other way, at links Craft thinks it has.
 
 ## Templating
