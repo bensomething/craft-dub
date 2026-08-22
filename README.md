@@ -94,6 +94,9 @@ re-point the drifted ones to match Craft:
 php craft dub/check --fix
 ```
 
+A recreated link is a new link at Dub, so its click history doesn't come back — that went with
+the link when it was deleted. The short URL and destination are restored, the statistics aren't.
+
 This is the counterpart to `dub/adopt`: adoption brings links that exist at Dub under Craft's
 management, while `dub/check` looks the other way, at links Craft thinks it has.
 
