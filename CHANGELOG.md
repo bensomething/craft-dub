@@ -9,6 +9,7 @@
 - Saving an entry whose short link hasn't moved no longer calls the Dub API. Resaving a section is now one request per link that actually changed, rather than one per entry per site.
 - `dub/adopt` can now adopt a link that points at a site's homepage. Homepages have no path, so they were skipped entirely when building the candidate list — a homepage link could never be adopted, and was reported as unmatched even when the plugin was already managing it.
 - `dub/adopt` now matches links on the host and path of their destination together, rather than the path alone, so sites on separate domains or subdomains are adopted correctly even when they share a path.
+- Installing over a table left behind by an older uninstall now adds any columns it's missing, rather than adopting it as-is. Craft records the current schema version at install time, so nothing else would ever have repaired it.
 - Uninstalling the plugin now drops its table. Dub keeps the links themselves, so `php craft dub/adopt` rebuilds the local records after a reinstall.
 
 ### Fixed
