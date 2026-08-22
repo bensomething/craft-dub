@@ -132,7 +132,18 @@ class DubService extends Component
                 return $this->lastError;
             }
 
+            // A 404 here means the link was deleted at Dub while the local record survived.
+            // Creating without a key lets Dub mint a random one, so the entry silently ends up
+            // on a different short URL from the one already in circulation — a QR code or a
+            // printed link stops working, and nothing says so. Fall back to the recorded slug,
+            // which is exactly what dub/check --fix does when it recreates a missing link.
             $createBody = array_merge(['url' => $url, 'externalId' => $externalId], $optionals);
+            if (!isset($createBody['key'])) {
+                $recordedKey = $this->shortLinkPart($this->recordedShortLink($entry), PHP_URL_PATH);
+                if ($recordedKey !== null && $recordedKey !== '') {
+                    $createBody['key'] = $recordedKey;
+                }
+            }
 
             $result = $this->makeRequest('POST', '/links', $createBody);
 
@@ -898,6 +909,16 @@ class DubService extends Component
     private function findRecord(int $entryId, int $siteId): ?DubLink
     {
         return DubLink::findOne(['entryId' => $entryId, 'siteId' => $siteId]);
+    }
+
+    /**
+     * The short link currently recorded for an entry's own site, if any.
+     */
+    private function recordedShortLink(Entry $entry): ?string
+    {
+        $entryId = $entry->getCanonicalId();
+
+        return $entryId ? $this->findRecord($entryId, $entry->siteId)?->shortLink : null;
     }
 
     /**
