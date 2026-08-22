@@ -572,7 +572,9 @@ class DubService extends Component
         }
 
         $entry = $candidates[0];
-        $label = $entry['title'] . ' [' . $entry['siteId'] . ']';
+        // An entry can have no title — a Single often doesn't — and " [1] → https://…" tells
+        // nobody which entry was adopted. Fall back to the id, as dub/check's labels do.
+        $label = ($entry['title'] ?: '#' . $entry['id']) . ' [' . $entry['siteId'] . ']';
 
         if ($this->findRecord($entry['id'], $entry['siteId']) !== null) {
             $summary['skipped']++;
