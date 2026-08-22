@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- `dub/adopt` now lists the first ten unmatched links and a count of the rest, rather than every one. Pass `--show-unmatched` for the full list.
 - Each site on a multi-site install can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**. `dub/adopt` scans each configured domain in turn, and `dub/check` compares every link against its own site's domain.
 
 ## 1.4.0 - 2026-08-22

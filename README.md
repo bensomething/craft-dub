@@ -77,6 +77,10 @@ php craft dub/adopt
 
 This scans your workspace, matches each link to a Craft entry by its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Matching uses the host and path together, so sites on separate domains or subdomains are told apart even when they share a path. Links are left untouched if no entry matches, or if two sites on the same host share the path.
 
+Links it could not match are listed, capped at the first ten with a count of the rest. Pass
+`--show-unmatched` to see them all, which is worth doing on a workspace holding domains this
+install does not manage.
+
 Add `--dry-run` to preview what would be adopted without making any changes:
 
 ```
