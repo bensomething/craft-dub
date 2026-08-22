@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 - 2026-08-22
 
 ### Added
 - A `dub/check` console command, which reports short links that are missing from Dub, have been edited there, or no longer point where their entry lives.
