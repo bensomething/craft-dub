@@ -177,6 +177,32 @@ class DubServiceTest extends TestCase
         ];
     }
 
+    #[DataProvider('externalIdProvider')]
+    public function testAnExternalIdSplitsIntoAnEntryUidAndSiteId(?string $externalId, ?array $expected): void
+    {
+        $this->assertSame($expected, $this->invokePrivate($this->service(), 'parseExternalId', $externalId));
+    }
+
+    /** @return array<string, array{?string, array{0: string, 1: int}|null}> */
+    public static function externalIdProvider(): array
+    {
+        $uid = '32466b29-a0af-4db4-8561-90144798594a';
+
+        return [
+            'what prepareLink stamps' => [$uid . '_1', [$uid, 1]],
+            'a multi-digit site' => [$uid . '_42', [$uid, 42]],
+            // Split on the last underscore: a uid uses hyphens, but an id stamped by something
+            // else might not, and the site id is always the final segment.
+            'an id containing underscores' => ['some_other_id_2', ['some_other_id', 2]],
+            'no site id' => [$uid, null],
+            'a non-numeric site id' => [$uid . '_abc', null],
+            'a trailing underscore' => [$uid . '_', null],
+            'a leading underscore and nothing before it' => ['_1', null],
+            'empty' => ['', null],
+            'null' => [null, null],
+        ];
+    }
+
     // Candidate matching
     // -------------------------------------------------------------------------
 

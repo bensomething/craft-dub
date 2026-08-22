@@ -556,7 +556,13 @@ class DubService extends Component
             return;
         }
 
-        $candidates = $this->matchCandidates($destUrl, $maps, $rewrites);
+        // A link this plugin created carries an externalId naming its entry and site exactly,
+        // so there is nothing to work out: matching it by destination would be guessing at
+        // something already known. It also keeps the report honest where several entries share
+        // a path — those links were reported as ambiguous when they were simply already ours.
+        $owned = $this->entryForExternalId(is_string($link['externalId'] ?? null) ? $link['externalId'] : null);
+
+        $candidates = $owned !== null ? [$owned] : $this->matchCandidates($destUrl, $maps, $rewrites);
 
         if (empty($candidates)) {
             $summary['unmatched'][] = $shortLink . ' → ' . $destUrl;
@@ -832,6 +838,62 @@ class DubService extends Component
     private function recordedEntryUrl(DubLink $record): ?string
     {
         return $this->recordedEntry($record)?->getUrl();
+    }
+
+    /**
+     * The entry a link's externalId names, if it still exists.
+     *
+     * Falls back to null — and so to destination matching — when the id can't be parsed or the
+     * entry has since gone, rather than treating the link as unmatchable.
+     *
+     * @return EntryCandidate|null
+     */
+    private function entryForExternalId(?string $externalId): ?array
+    {
+        $parsed = $this->parseExternalId($externalId);
+        if ($parsed === null) {
+            return null;
+        }
+
+        [$uid, $siteId] = $parsed;
+
+        $entry = Entry::find()->uid($uid)->siteId($siteId)->status(null)->one();
+
+        return $entry ? [
+            'id' => $entry->id,
+            'uid' => $entry->uid,
+            'siteId' => $siteId,
+            'title' => $entry->title,
+        ] : null;
+    }
+
+    /**
+     * Splits an externalId into the entry uid and site id that prepareLink() joined.
+     *
+     * Split on the last underscore, not the first: a uid contains hyphens rather than
+     * underscores, but nothing guarantees that of an id stamped by something else.
+     *
+     * @return array{0: string, 1: int}|null
+     */
+    private function parseExternalId(?string $externalId): ?array
+    {
+        if ($externalId === null || $externalId === '') {
+            return null;
+        }
+
+        $pos = strrpos($externalId, '_');
+        if ($pos === false || $pos === 0) {
+            return null;
+        }
+
+        $uid = substr($externalId, 0, $pos);
+        $siteId = substr($externalId, $pos + 1);
+
+        if ($siteId === '' || !ctype_digit($siteId)) {
+            return null;
+        }
+
+        return [$uid, (int)$siteId];
     }
 
     /**
