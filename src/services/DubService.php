@@ -35,6 +35,9 @@ class DubService extends Component
     /** @var array<string,Entry> Entries scheduled for deletion, keyed by entry uid + site. */
     private array $pendingDeletes = [];
 
+    /** @var array<int,list<int>> Site ids captured before a hard delete cascades the rows away. */
+    private array $doomedSiteIds = [];
+
     /**
      * A stable key for the pending-state maps. Uses the entry uid (assigned before
      * EVENT_BEFORE_SAVE, unlike the numeric id on new entries) plus the site, so nested
@@ -170,6 +173,26 @@ class DubService extends Component
     }
 
     /**
+     * Records which sites have links for an entry, before its rows can disappear.
+     *
+     * Craft deletes the row from `elements` and only then calls afterDelete(), and the links
+     * table has a cascading foreign key onto it — so on a hard delete the rows are already
+     * gone by the time the delete handler runs, taking with them the only record of which
+     * sites had links. Without this the DELETEs are never sent and the links are stranded at
+     * Dub forever, archived by the trash that preceded the delete.
+     *
+     * Call from EVENT_BEFORE_DELETE. $entry->hardDelete is assigned before beforeDelete(), so
+     * the caller can tell a trash from a delete by then.
+     */
+    public function rememberLinksForDeletion(Entry $entry): void
+    {
+        $entryId = $entry->getCanonicalId();
+        if ($entryId) {
+            $this->doomedSiteIds[$entryId] = $this->linkedSiteIds($entryId);
+        }
+    }
+
+    /**
      * Archives the entry's link for its own site. Used when an entry stops being live.
      */
     public function deactivateLink(Entry $entry): void
@@ -252,8 +275,15 @@ class DubService extends Component
             return;
         }
 
+        // Prefer what was captured before the delete: on a hard delete the rows this would
+        // otherwise read are already gone, cascaded away with the element.
+        $linked = $this->doomedSiteIds[$entryId] ?? $this->linkedSiteIds($entryId);
+        unset($this->doomedSiteIds[$entryId]);
+
+        $targets = $siteId === null ? $linked : array_values(array_intersect($linked, [$siteId]));
+
         if ($this->apiKey()) {
-            foreach ($this->targetSiteIds($entryId, $siteId === null ? null : [$siteId]) as $target) {
+            foreach ($targets as $target) {
                 $this->makeRequest('DELETE', '/links/ext_' . $entry->uid . '_' . $target);
             }
         }

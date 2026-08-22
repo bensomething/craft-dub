@@ -157,6 +157,21 @@ class Plugin extends BasePlugin
             }
         });
 
+        Event::on(Entry::class, Element::EVENT_BEFORE_DELETE, function(Event $event) {
+            /** @var Entry $entry */
+            $entry = $event->sender;
+
+            if (!self::actsOnLifecycleOf($entry->getIsDraft(), $entry->getIsRevision())) {
+                return;
+            }
+
+            // Only a hard delete needs this. A trash leaves the rows alone, so the delete
+            // handler can still read them; a hard delete cascades them away before it runs.
+            if ($entry->hardDelete) {
+                Plugin::getInstance()->dub->rememberLinksForDeletion($entry);
+            }
+        });
+
         Event::on(Entry::class, Element::EVENT_AFTER_DELETE, function(Event $event) {
             /** @var Entry $entry */
             $entry = $event->sender;

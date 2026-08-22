@@ -445,6 +445,37 @@ class DubServiceTest extends TestCase
         $this->assertSame(['/links/ext_abc-123_2'], $this->sentPaths());
     }
 
+    public function testAHardDeleteStillDeletesLinksAfterTheRowsHaveCascadedAway(): void
+    {
+        // Craft removes the elements row before calling afterDelete(), and the links table
+        // cascades off it — so by the time the handler runs there is nothing left to read.
+        // Without the ids captured in beforeDelete() no DELETE is sent and the links are
+        // stranded at Dub.
+        $service = $this->stub([new Response(200, [], '{}'), new Response(200, [], '{}')], [1, 2]);
+        $entry = $this->savedEntry('abc-123', 1, 55);
+
+        $service->rememberLinksForDeletion($entry);
+        $service->recordedSiteIds = [];
+
+        $service->deleteLink($entry);
+
+        $this->assertSame(['/links/ext_abc-123_1', '/links/ext_abc-123_2'], $this->sentPaths());
+    }
+
+    public function testACapturedListIsNotReusedByASecondDelete(): void
+    {
+        $service = $this->stub([new Response(200, [], '{}')], [1]);
+        $entry = $this->savedEntry('abc-123', 1, 55);
+
+        $service->rememberLinksForDeletion($entry);
+        $service->recordedSiteIds = [];
+        $service->deleteLink($entry);
+        $service->deleteLink($entry);
+
+        // The second call finds nothing recorded and nothing captured, so it stays silent.
+        $this->assertSame(['/links/ext_abc-123_1'], $this->sentPaths());
+    }
+
     public function testDeactivatingAnEntryWithNoRecordedLinkMakesNoApiCall(): void
     {
         // Otherwise every save of every non-live entry costs a blocking round-trip that can
