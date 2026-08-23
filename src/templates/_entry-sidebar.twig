@@ -137,10 +137,34 @@
             z-index: 1;
         }
 
-        /* In a slideout the surrounding fields are plain rows with no pane treatment of their
-           own, so a raised card reads as something that wandered in from another screen rather
-           than as a hierarchy. Flatten it there and let the recessed rows below carry the
-           distinction on their own. */
+        /* A slideout keeps the recessed readouts but loses the raised key row. Its fields are
+           plain rows on the default background, so a card reads as a component from another
+           screen, while the well still separates the control from the readouts about it.
+
+           The panel goes back to Craft's colour so the key row, now transparent, matches the
+           fields above it. The readouts paint their own darker colour over that.
+
+           Ordering matters as much as the selectors: this ties the panel rule above at 0,3,0
+           and wins by coming after it. The #details variant above is more specific still, but
+           a slideout has no #details ancestor for it to match. */
+        .so-sidebar .meta.dub-meta {
+            background-color: var(--gray-050) !important;
+        }
+
+        /* Two 50% layers compose to 75%, which is what the readouts get on the entry page:
+           their own colour over a panel painted the same. Here the panel is back to Craft's,
+           so a single 50% pass lands lighter. State the composite instead. */
+        .so-sidebar .dub-detail-field {
+            background-color: hsla(var(--gray-150-hsl), 0.75);
+        }
+
+        /* The Link row carries Craft's `first-child` class to suppress the divider above it,
+           which is right under a raised card and wrong under a plain row. Put it back here,
+           since without it the first two rows read as one. */
+        .so-sidebar .dub-detail-field.first-child {
+            border-block-start: 1px solid var(--border-hairline);
+        }
+
         .so-sidebar .dub-key-field {
             background-color: transparent;
             box-shadow: none;
