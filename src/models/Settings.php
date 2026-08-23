@@ -2,7 +2,6 @@
 
 namespace bensomething\craftdub\models;
 
-use bensomething\craftdub\Plugin;
 use Craft;
 use craft\base\Model;
 
@@ -16,7 +15,25 @@ class Settings extends Model
     public const QR_MARGIN_MAX = 20;
 
     public string $apiKey = '';
+
+    /**
+     * The short link domain used by any site without an override.
+     */
     public string $domain = '';
+
+    /**
+     * Per-site domain overrides, keyed by site UID.
+     *
+     * Keyed by UID rather than site ID so the setting survives project config moving between
+     * environments, where the IDs differ.
+     *
+     * Typed loosely because this is raw CP input: the editable table posts
+     * `[uid => ['domain' => '…']]`, but a posted value can be any shape. Read it normalised
+     * via {@see getSiteDomains()} rather than directly.
+     *
+     * @var array<mixed>|string
+     */
+    public array|string $siteDomains = [];
 
     /**
      * Enabled section handles or UIDs, or `['*']` for all of them.
@@ -46,7 +63,6 @@ class Settings extends Model
     {
         return [
             [['apiKey', 'domain'], 'string'],
-            [['domain'], 'validateDomain'],
             [['qrViewMode'], 'in', 'range' => self::QR_VIEW_MODES],
             [['showClicks'], 'boolean'],
             [['sections'], 'filter', 'filter' => function($value) {
@@ -110,21 +126,118 @@ class Settings extends Model
      * references (e.g. $DUB_DOMAIN) and degrades gracefully if the domains can't be fetched
      * (no API key yet, or the API is unreachable), so setup isn't blocked.
      */
-    public function validateDomain(string $attribute): void
+    /**
+     * The overrides as a plain uid => domain map, with blanks and junk dropped.
+     *
+     * @return array<string, string>
+     */
+    public function getSiteDomains(): array
     {
-        $value = $this->$attribute;
-
-        if (empty($value) || str_starts_with($value, '$')) {
-            return;
+        if (!is_array($this->siteDomains)) {
+            return [];
         }
 
-        $domains = Plugin::getInstance()->dub->getDomains();
-        if (empty($domains)) {
-            return;
+        $domains = [];
+
+        foreach ($this->siteDomains as $uid => $row) {
+            // The table posts a row of cells; a value set in code may be the domain itself.
+            $domain = is_array($row) ? ($row['domain'] ?? '') : $row;
+
+            if (is_string($uid) && is_string($domain) && trim($domain) !== '') {
+                $domains[$uid] = trim($domain);
+            }
         }
 
-        if (!in_array($value, array_column($domains, 'slug'), true)) {
-            $this->addError($attribute, Craft::t('dub', 'That domain isn’t available in your Dub workspace.'));
+        return $domains;
+    }
+
+    /**
+     * The short link domain a given site's links belong on, with environment variables resolved.
+     *
+     * Falls back to the default domain, so an install that wants one domain everywhere carries
+     * no overrides at all and behaves exactly as it did before per-site domains existed.
+     */
+    public function domainForSite(int $siteId): string
+    {
+        $site = Craft::$app->getSites()->getSiteById($siteId);
+        $override = $site !== null ? ($this->getSiteDomains()[$site->uid] ?? '') : '';
+
+        $value = Craft::parseEnv($override !== '' ? $override : $this->domain);
+
+        return is_string($value) ? $value : '';
+    }
+
+    /**
+     * Every distinct domain this install writes links to, resolved and deduplicated.
+     *
+     * Adoption pages the Dub workspace once per domain rather than scanning it unfiltered, so
+     * it never takes over links on a domain nothing here manages.
+     *
+     * @return list<string>
+     */
+    public function configuredDomains(): array
+    {
+        $domains = [Craft::parseEnv($this->domain)];
+
+        foreach ($this->getSiteDomains() as $override) {
+            $domains[] = Craft::parseEnv($override);
         }
+
+        return self::distinctDomains($domains);
+    }
+
+    /**
+     * Drops blanks and duplicates from a list of resolved domains.
+     *
+     * Both matter to adoption, which pages the whole workspace once per domain. A duplicate
+     * costs an entire redundant scan, and a blank costs an unfiltered pass that considers every
+     * link in the workspace. Neither surfaces as an error, only as a slower run.
+     *
+     * @param array<mixed> $values
+     * @return list<string>
+     */
+    private static function distinctDomains(array $values): array
+    {
+        $values = array_filter($values, static fn($value): bool => is_string($value) && $value !== '');
+
+        return array_values(array_unique($values));
+    }
+
+    /**
+     * Why a domain will not work, or null if it is fine.
+     *
+     * A warning rather than a validation error, for two reasons. The list of available domains
+     * comes from the Dub API, so an outage or a rate limit means it comes back empty and the
+     * check silently passes anyway: something that cannot be relied on to block should not be
+     * blocking. And an environment variable resolves differently per environment, so a value
+     * that is wrong on a laptop may be exactly right in production.
+     *
+     * Environment variables are resolved first and the result is what gets checked, so one
+     * pointing somewhere that is not a Dub domain is caught rather than waved through for
+     * beginning with a `$`. One that resolves to nothing is left alone, since it is presumably
+     * set somewhere this is not.
+     *
+     * @param list<string> $available Domain slugs in the workspace. Empty means unknown, not none.
+     */
+    public function domainWarning(string $value, array $available): ?string
+    {
+        if ($value === '' || $available === []) {
+            return null;
+        }
+
+        $resolved = Craft::parseEnv($value);
+
+        if (!is_string($resolved) || $resolved === '' || in_array($resolved, $available, true)) {
+            return null;
+        }
+
+        if ($resolved !== $value) {
+            return Craft::t('dub', '{value} resolves to {domain}, which isn’t in your Dub workspace.', [
+                'value' => $value,
+                'domain' => $resolved,
+            ]);
+        }
+
+        return Craft::t('dub', '{domain} isn’t in your Dub workspace.', ['domain' => $resolved]);
     }
 }

@@ -19,9 +19,19 @@ use yii\console\ExitCode;
 class AdoptController extends Controller
 {
     /**
+     * @var int How many unmatched links to list before summarising the rest.
+     */
+    private const UNMATCHED_SHOWN = 10;
+
+    /**
      * @var bool Report what would be adopted without changing anything.
      */
     public bool $dryRun = false;
+
+    /**
+     * @var bool List every unmatched link rather than the first few.
+     */
+    public bool $showUnmatched = false;
 
     /**
      * @var string|null Comma-separated prefix rewrites (from=to) applied to a link's
@@ -32,7 +42,7 @@ class AdoptController extends Controller
 
     public function options($actionID): array
     {
-        return array_merge(parent::options($actionID), ['dryRun', 'rewrite']);
+        return array_merge(parent::options($actionID), ['dryRun', 'rewrite', 'showUnmatched']);
     }
 
     /**
@@ -104,9 +114,23 @@ class AdoptController extends Controller
         ), Console::FG_CYAN);
 
         if (!empty($summary['unmatched'])) {
+            // These lines are here to help spot a link that should have matched, which they
+            // can't do buried in hundreds of unrelated ones. A workspace holding several
+            // domains, which is what per-site domains make normal, reaches that easily.
+            $unmatched = $summary['unmatched'];
+            $shown = $this->showUnmatched ? $unmatched : array_slice($unmatched, 0, self::UNMATCHED_SHOWN);
+            $hidden = count($unmatched) - count($shown);
+
             $this->stdout("\nUnmatched Dub links (no entry found for the destination path):\n", Console::FG_YELLOW);
-            foreach ($summary['unmatched'] as $u) {
+            foreach ($shown as $u) {
                 $this->stdout("  - $u\n");
+            }
+
+            if ($hidden > 0) {
+                $this->stdout(sprintf(
+                    "  … and %d more. Pass --show-unmatched to list them all.\n",
+                    $hidden,
+                ), Console::FG_GREY);
             }
         }
 

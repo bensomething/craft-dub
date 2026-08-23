@@ -108,7 +108,7 @@ class DubService extends Component
             return null;
         }
 
-        $domain = Craft::parseEnv($settings->domain);
+        $domain = $settings->domainForSite($entry->siteId);
         $externalId = $entry->uid . '_' . $entry->siteId;
 
         $optionals = [];
@@ -120,7 +120,7 @@ class DubService extends Component
         }
 
         // Nothing has moved since the last save, so there's nothing to send.
-        if ($this->isLinkCurrent($entry, $url, $customKey, is_string($domain) ? $domain : null)) {
+        if ($this->isLinkCurrent($entry, $url, $customKey, $domain !== '' ? $domain : null)) {
             return null;
         }
 
@@ -475,8 +475,6 @@ class DubService extends Component
             $summary['error'] = 'No Dub API key configured.';
             return $summary;
         }
-        $domain = Craft::parseEnv($settings->domain);
-
         // Two maps of entry candidates across every site: one keyed by host + path, one by
         // path alone. Host + path identifies a single site's entry even when the sites share
         // their paths, which is what a domain- or subdomain-per-site install looks like
@@ -509,30 +507,39 @@ class DubService extends Component
             }
         }
 
-        // Walk the entire workspace, page by page.
-        $page = 1;
-        $pageSize = 100;
-        do {
-            $query = ['page' => $page, 'pageSize' => $pageSize];
-            if ($domain) {
-                $query['domain'] = $domain;
-            }
+        // Once per configured domain rather than once over the whole workspace. A workspace
+        // can hold domains this install knows nothing about, and scanning unfiltered would
+        // adopt links on them purely because their destination happens to match an entry.
+        // With no domain configured at all there is nothing to filter by, so the single
+        // unfiltered pass is the only thing left to do.
+        $domains = $settings->configuredDomains() ?: [null];
 
-            $links = $this->makeRequest('GET', '/links', [], $query);
-            if ($links === null && $this->lastError) {
-                $summary['error'] = $this->lastError;
-                return $summary;
-            }
-            if (!is_array($links) || empty($links)) {
-                break;
-            }
+        foreach ($domains as $domain) {
+            $page = 1;
+            $pageSize = 100;
 
-            foreach ($links as $link) {
-                $this->adoptOne($link, $maps, $rewrites, $dryRun, $summary, $onResult);
-            }
+            do {
+                $query = ['page' => $page, 'pageSize' => $pageSize];
+                if ($domain !== null) {
+                    $query['domain'] = $domain;
+                }
 
-            $page++;
-        } while (count($links) === $pageSize);
+                $links = $this->makeRequest('GET', '/links', [], $query);
+                if ($links === null && $this->lastError) {
+                    $summary['error'] = $this->lastError;
+                    return $summary;
+                }
+                if (!is_array($links) || empty($links)) {
+                    break;
+                }
+
+                foreach ($links as $link) {
+                    $this->adoptOne($link, $maps, $rewrites, $dryRun, $summary, $onResult);
+                }
+
+                $page++;
+            } while (count($links) === $pageSize);
+        }
 
         return $summary;
     }
@@ -739,11 +746,13 @@ class DubService extends Component
             return 'entry now at ' . $url;
         }
 
-        $domain = Craft::parseEnv(Plugin::getInstance()->getSettings()->domain);
+        // The site's own domain, so changing one site's override makes only that site's links
+        // stale rather than every link in the install.
+        $domain = Plugin::getInstance()->getSettings()->domainForSite((int)$record->siteId);
         $recordedDomain = $this->shortLinkPart($record->shortLink, PHP_URL_HOST);
 
-        if (is_string($domain) && $domain !== '' && $recordedDomain !== null && $recordedDomain !== $domain) {
-            return 'on ' . $recordedDomain . ', but the configured domain is ' . $domain;
+        if ($domain !== '' && $recordedDomain !== null && $recordedDomain !== $domain) {
+            return 'on ' . $recordedDomain . ', but this site is configured for ' . $domain;
         }
 
         return null;

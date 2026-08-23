@@ -30,6 +30,24 @@ php craft plugin/install dub
 4. In the **Sections** field, choose which sections to enable short links for. Leave **All** selected to enable every section that has URLs.
 5. On the **Sidebar** tab, choose how the **QR code** appears in the entry sidebar (**None**, **Icon**, or **Full**), set its **style** (size, margin, foreground/background colour), and choose whether to **Show click count**.
 
+### Domains per site
+
+The **General** tab also lists every site that has its own base URL, so each can have its own
+short link domain. Sites without one are left out, since their entries have no URLs to shorten,
+and the list only appears when more than one site qualifies. Leave a site blank and it uses the
+**Domain** above. Each field suggests your Dub domains and accepts an environment variable,
+exactly like the main one.
+
+This only affects links created or updated from then on. An existing link keeps the domain it
+was created on until its entry is next saved, so after changing a site's domain run:
+
+```
+php craft resave/entries
+```
+
+`php craft dub/check` reports the links still on the old domain as stale in the meantime, so you
+can see what is left to move.
+
 ### Setting enabled sections via environment
 
 You can override the **Sections** selection with the `DUB_SECTIONS` environment variable, a comma-separated list of section **handles**:
@@ -60,6 +78,10 @@ php craft dub/adopt
 ```
 
 This scans your workspace, matches each link to a Craft entry by its destination URL, sets the entry's `externalId` on the link so the plugin manages it going forward, and records it locally. Matching uses the host and path together, so sites on separate domains or subdomains are told apart even when they share a path. Links are left untouched if no entry matches, or if two sites on the same host share the path.
+
+Links it could not match are listed, capped at the first ten with a count of the rest. Pass
+`--show-unmatched` to see them all, which is worth doing on a workspace holding domains this
+install does not manage.
 
 Add `--dry-run` to preview what would be adopted without making any changes:
 

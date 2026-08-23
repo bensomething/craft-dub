@@ -99,6 +99,41 @@ class Plugin extends BasePlugin
 
         $sectionsEnv = App::env('DUB_SECTIONS');
 
+        // Only sites that can actually hold a link. A site without its own base URL has no
+        // entry URLs at all, so prepareLink() never gets as far as a domain for it, and a row
+        // offering one would be dead. By the same measure the whole section is pointless
+        // unless more than one such site exists, since the default covers the only one.
+        $sites = array_values(array_filter(
+            Craft::$app->getSites()->getAllSites(),
+            static fn($site): bool => $site->hasUrls,
+        ));
+        $overrides = $settings->getSiteDomains();
+
+        // One list for every check below. getDomains() is a live API call with no cache, so
+        // asking per site would be a request per row on every render of this screen.
+        $available = array_column($domains, 'slug');
+
+        $domainWarning = $settings->domainWarning($settings->domain, $available);
+
+        // Resolved, so a row left blank shows the domain it will actually use rather than the
+        // variable name standing in for it.
+        $defaultDomain = Craft::parseEnv($settings->domain);
+
+        $siteDomainWarnings = [];
+        foreach ($sites as $site) {
+            $warning = $settings->domainWarning($overrides[$site->uid] ?? '', $available);
+            if ($warning !== null) {
+                $siteDomainWarnings[] = $site->name . ': ' . $warning;
+            }
+        }
+
+        // With every site overridden the default is unreachable, which is worth saying rather
+        // than leaving someone to wonder why editing it changes nothing.
+        $allSitesOverridden = $sites !== [] && !array_filter(
+            $sites,
+            static fn($site): bool => ($overrides[$site->uid] ?? '') === '',
+        );
+
         /** @var Controller $controller */
         $controller = Craft::$app->controller;
 
@@ -109,6 +144,13 @@ class Plugin extends BasePlugin
             'sectionOptions' => $sectionOptions,
             'enabledSections' => $this->getEnabledSections(),
             'sectionsOverridden' => $sectionsEnv !== null && $sectionsEnv !== '',
+            'sites' => $sites,
+            'siteDomains' => $overrides,
+            'allSitesOverridden' => $allSitesOverridden,
+            'domainWarning' => $domainWarning,
+            'defaultDomain' => is_string($defaultDomain) ? $defaultDomain : '',
+            'siteDomainWarning' => $siteDomainWarnings !== [] ? implode(' ', $siteDomainWarnings) : null,
+            'showSiteDomains' => count($sites) > 1,
         ]);
     }
 
@@ -311,8 +353,10 @@ class Plugin extends BasePlugin
             $sectionEnabled = $this->entrySectionHasUrls($entry, true);
             $settings = Plugin::getInstance()->getSettings();
             $hasApiKey = !empty(Craft::parseEnv($settings->apiKey));
-            $domain = Craft::parseEnv($settings->domain);
-            $hasDomain = !empty($domain);
+            // The domain this entry's own site writes to, so the heading names the domain the
+            // link will actually be created on rather than the install-wide default.
+            $domain = $settings->domainForSite($entry->siteId);
+            $hasDomain = $domain !== '';
             $shortLink = Plugin::getInstance()->dub->getShortLink($entry->getCanonicalId(), $entry->siteId);
 
             // Only show sidebar if section is enabled or entry already has a short link
