@@ -4,6 +4,7 @@
 
 ### Added
 - Each site with its own base URL can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**.
+- A **Test** button on the settings screen, and a `dub/test` console command, which create a short link, read it back, fetch its QR code and delete it again, reporting each step.
 - Two user permissions, **View the Short Link panel** and **Edit the short link slug**, under a **Dub Links** heading.
 
 ### Changed

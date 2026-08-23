@@ -17,6 +17,7 @@ use yii\base\Component;
  * @phpstan-type PathMap array<string, list<EntryCandidate>>
  * @phpstan-type CandidateMaps array{url: PathMap, path: PathMap}
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
+ * @phpstan-type TestStep array{step: string, ok: bool, detail: string}
  * @phpstan-type CheckSummary array{checked: int, ok: int, missing: int, drifted: int, stale: int, unreadable: int, repaired: int, unrepaired: int, error: string|null}
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
@@ -616,6 +617,112 @@ class DubService extends Component
         $this->saveLink($entry['id'], $entry['siteId'], $dubId, $shortLink, $destUrl, (bool)($link['archived'] ?? false));
         $summary['adopted']++;
         $onResult && $onResult('adopted', $label . ' → ' . $shortLink);
+    }
+
+    /**
+     * Runs a live round trip against Dub and reports what worked.
+     *
+     * The point is the write. A read-only probe would catch a bad key or a missing domain, but
+     * the domain list failing to load already says the first and the settings screen already
+     * warns about the second. What neither catches is a token without write scope, or a
+     * workspace at its link limit: those pass every GET and fail the moment an editor saves.
+     *
+     * Each step is reported separately because "it failed" is much less useful than "created
+     * but could not delete", which says the token is write-but-not-delete and that there is now
+     * an orphan to clear up.
+     *
+     * @return list<TestStep>
+     */
+    public function runTest(): array
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $steps = [];
+
+        if (!$this->apiKey()) {
+            return [['step' => 'API key', 'ok' => false, 'detail' => 'No API key configured']];
+        }
+
+        $domains = $this->getDomains();
+        $available = array_column($domains, 'slug');
+
+        if ($domains === []) {
+            $steps[] = ['step' => 'API key', 'ok' => false, 'detail' => $this->lastError ?? 'Could not read your workspace'];
+
+            return $steps;
+        }
+
+        $steps[] = ['step' => 'API key', 'ok' => true, 'detail' => 'Connected'];
+
+        $domain = Craft::parseEnv($settings->domain);
+        $domain = is_string($domain) ? $domain : '';
+
+        if ($domain === '') {
+            $steps[] = ['step' => 'Domain', 'ok' => false, 'detail' => 'No domain configured'];
+
+            return $steps;
+        }
+
+        $domainOk = in_array($domain, $available, true);
+        $steps[] = [
+            'step' => 'Domain',
+            'ok' => $domainOk,
+            'detail' => $domainOk ? $domain : $domain . ' is not in the workspace',
+        ];
+
+        if (!$domainOk) {
+            return $steps;
+        }
+
+        // Random, and stamped with an externalId nothing else uses, so a leftover from a failed
+        // run is identifiable rather than looking like a link somebody made.
+        $key = 'dub-test-' . bin2hex(random_bytes(4));
+        $externalId = 'dub-plugin-test-' . $key;
+
+        $created = $this->makeRequest('POST', '/links', [
+            'url' => 'https://example.com/craft-dub-connection-test',
+            'domain' => $domain,
+            'key' => $key,
+            'externalId' => $externalId,
+        ]);
+
+        if (!is_array($created)) {
+            $steps[] = ['step' => 'Create link', 'ok' => false, 'detail' => $this->lastError ?? 'Dub refused to create a link'];
+
+            return $steps;
+        }
+
+        // Not the URL. It is deleted two steps below, so showing it invites a click on a link
+        // that will 404, and the only moment it matters is a failed delete, which names the key
+        // itself.
+        $steps[] = ['step' => 'Create link', 'ok' => true, 'detail' => 'Created'];
+
+        $linkId = is_string($created['id'] ?? null) ? $created['id'] : null;
+
+        $readBack = $linkId !== null ? $this->makeRequest('GET', '/links/info', [], ['linkId' => $linkId]) : null;
+        $steps[] = [
+            'step' => 'Read link',
+            'ok' => is_array($readBack),
+            'detail' => is_array($readBack) ? 'Found' : ($this->lastError ?? 'Could not read the link back'),
+        ];
+
+        $qr = $this->makeRequest('GET', '/qr', [], ['url' => $created['shortLink'] ?? '']);
+        $steps[] = [
+            'step' => 'Fetch QR',
+            'ok' => $qr !== null || $this->lastError === null,
+            'detail' => $this->lastError ?? 'Available',
+        ];
+
+        $deleted = $linkId !== null ? $this->makeRequest('DELETE', '/links/' . $linkId) : null;
+        $goneOk = $deleted !== null || $this->lastError === null;
+        $steps[] = [
+            'step' => 'Delete link',
+            'ok' => $goneOk,
+            'detail' => $goneOk
+                ? 'Removed'
+                : ($this->lastError ?? 'Could not delete it') . '. Remove ' . $key . ' by hand',
+        ];
+
+        return $steps;
     }
 
     /**

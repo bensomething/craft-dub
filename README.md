@@ -30,6 +30,18 @@ php craft plugin/install dub
 4. In the **Sections** field, choose which sections to enable short links for. Leave **All** selected to enable every section that has URLs.
 5. On the **Sidebar** tab, choose how the **QR code** appears in the entry sidebar (**None**, **Icon**, or **Full**), set its **style** (size, margin, foreground/background colour), and choose whether to **Show click count**.
 
+### Checking it works
+
+The **General** tab has a **Test** button, and there is a console equivalent:
+
+```
+php craft dub/test
+```
+
+Both create a short link, read it back, fetch its QR code and delete it again, reporting each
+step. The write matters: an API key with no write scope, or a workspace at its link limit,
+passes every read and then fails the first time an editor saves an entry.
+
 ### Domains per site
 
 The **General** tab also lists every site that has its own base URL, so each can have its own

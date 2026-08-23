@@ -143,6 +143,24 @@
                 warning: sectionsOverridden ? 'This is being overridden by the `DUB_SECTIONS` environment variable.' | t('dub') : null,
             }) }}
             {% endif %}
+
+            <hr>
+            <div class="field">
+                <div class="heading">
+                    <label>{{ 'Connection' | t('dub') }}</label>
+                    <div class="instructions">
+                        <p>{{ 'Creates a short link, reads it, and then deletes it.' | t('dub') }}</p>
+                    </div>
+                </div>
+                <div class="input">
+                    {{ forms.button({
+                        label: 'Test' | t('dub'),
+                        spinner: true,
+                        attributes: { data: { 'dub-test': true } },
+                    }) }}
+                    <div data-dub-test-results class="dub-test-results" role="status"></div>
+                </div>
+            </div>
         {% endnamespace %}
     </div>
 
@@ -193,4 +211,98 @@
             }) }}
         {% endnamespace %}
     </div>
+
+    {% js %}
+        (() => {
+            const button = document.querySelector('[data-dub-test]');
+            const results = document.querySelector('[data-dub-test-results]');
+
+            if (!button || !results) {
+                console.warn('Dub: test button not found');
+                return;
+            }
+
+            button.addEventListener('click', async () => {
+                button.classList.add('loading');
+                button.disabled = true;
+                results.innerHTML = '';
+
+                try {
+                    const {data} = await Craft.sendActionRequest('POST', 'dub/test/run');
+
+                    // Craft's own static table chrome, so it reads as part of the settings
+                    // screen rather than as a list bolted underneath it.
+                    const rows = data.steps.map((step) => {
+                        // The mark is hidden from screen readers and the state is given as
+                        // words instead, since a red tick and a green tick are the same tick to
+                        // anyone who cannot tell them apart.
+                        const mark = step.ok ? '✓' : '✗';
+                        const state = step.ok ? Craft.t('dub', 'Passed') : Craft.t('dub', 'Failed');
+                        const cls = step.ok ? 'dub-test-ok' : 'dub-test-fail';
+
+                        return `<tr class="${cls}">
+                            <td class="dub-test-mark">
+                                <span aria-hidden="true">${mark}</span>
+                                <span class="visually-hidden">${state}</span>
+                            </td>
+                            <th scope="row">${Craft.escapeHtml(step.step)}</th>
+                            <td class="dub-test-detail">${Craft.escapeHtml(step.detail)}</td>
+                        </tr>`;
+                    }).join('');
+
+                    results.innerHTML = `<table class="editable fullwidth dub-test-table">
+                        <tbody>${rows}</tbody>
+                    </table>`;
+                } catch (e) {
+                    results.innerHTML = `<p class="error">${Craft.escapeHtml(
+                        e?.response?.data?.message ?? Craft.t('dub', 'The test could not be run.')
+                    )}</p>`;
+                } finally {
+                    button.classList.remove('loading');
+                    button.disabled = false;
+                }
+            });
+        })();
+    {% endjs %}
+
+    {% css %}
+        .dub-test-results { margin-block-start: var(--s); }
+
+        /* The mark and the label take only what they need, so the detail column absorbs the
+           rest and every result starts at the same x position. */
+        table.dub-test-table tbody th[scope="row"] { white-space: nowrap; width: 1%; }
+
+        /* A real width rather than shrink-to-fit, or there is nothing for the mark to be
+           centred within. */
+        table.dub-test-table tbody td.dub-test-mark { width: 2.5rem; }
+        table.dub-test-table tbody td.dub-test-detail { width: 100%; }
+
+        /* Craft sets these cells to var(--input-bg), which is not a defined token, so they
+           come out transparent. State it. */
+        /* Craft gives td 4px block padding with vertical-align top, and th 6px, so the label
+           sits on a different baseline to the cells either side of it. One value for all
+           three, aligned centre so the mark lines up with its text.
+
+           Every selector here carries the element names as well as the class. Craft's are
+           `table.editable tbody tr td`, one class and three elements, which outranks a bare
+           class however many words it has. */
+        table.dub-test-table tbody tr td,
+        table.dub-test-table tbody tr th {
+            background-color: var(--white);
+            padding-block: 6px;
+            vertical-align: middle;
+        }
+
+        table.dub-test-table tbody td.dub-test-mark {
+            border-inline-end: 1px solid var(--border-hairline);
+            text-align: center;
+            font-weight: var(--font-weight-bold);
+        }
+
+        /* --enabled-color rather than --success-color: the latter is teal-700, dark enough to
+           read as grey at this size, while this is the green of a lightswitch that is on.
+           Element and class together, so Craft's own cell selectors cannot outrank these. */
+        table.dub-test-table tbody tr.dub-test-ok td.dub-test-mark { color: var(--enabled-color); }
+        table.dub-test-table tbody tr.dub-test-fail td.dub-test-mark { color: var(--error-color); }
+    {% endcss %}
 {% endblock %}
