@@ -67,7 +67,7 @@
                     : domainWarning,
             }) }}
 
-            {% if isMultiSite %}
+            {% if showSiteDomains %}
                 {# Craft's own table chrome, but the domain cell is rendered here rather than by
                    the table's autosuggest type. That type forwards only suggestEnvVars and
                    suggestAliases, so it cannot offer the workspace's own domains. An `html`

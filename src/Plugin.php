@@ -99,7 +99,14 @@ class Plugin extends BasePlugin
 
         $sectionsEnv = App::env('DUB_SECTIONS');
 
-        $sites = Craft::$app->getSites()->getAllSites();
+        // Only sites that can actually hold a link. A site without its own base URL has no
+        // entry URLs at all, so prepareLink() never gets as far as a domain for it, and a row
+        // offering one would be dead. By the same measure the whole section is pointless
+        // unless more than one such site exists, since the default covers the only one.
+        $sites = array_values(array_filter(
+            Craft::$app->getSites()->getAllSites(),
+            static fn($site): bool => $site->hasUrls,
+        ));
         $overrides = $settings->getSiteDomains();
 
         // One list for every check below. getDomains() is a live API call with no cache, so
@@ -143,7 +150,7 @@ class Plugin extends BasePlugin
             'domainWarning' => $domainWarning,
             'defaultDomain' => is_string($defaultDomain) ? $defaultDomain : '',
             'siteDomainWarning' => $siteDomainWarnings !== [] ? implode(' ', $siteDomainWarnings) : null,
-            'isMultiSite' => Craft::$app->getIsMultiSite(),
+            'showSiteDomains' => count($sites) > 1,
         ]);
     }
 
