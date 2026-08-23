@@ -94,6 +94,62 @@
         {% endif %}
     </div>
 </fieldset>
+{# The panel styling always applies. It lived in the block below until the QR display
+   being set to None meant no qrUrl, no block, and a sidebar that silently reverted to
+   Craft's default rows. That block is for the QR modal, which genuinely only matters when
+   there is a QR code. #}
+{% css %}
+        /* The key input is the control. Link, Clicks and QR are readouts about it, so the
+           panel becomes a well with the key row raised out of it, rather than four rows of
+           equal weight. Done with colour and shadow rather than by restructuring: .meta lays
+           its rows out as flex with a fixed heading column, and wrapping them would lose that.
+
+           The panel carries the recessed colour so the key row's rounded corners have
+           something darker to cut into. Rounding it against a background identical to its own
+           is why the corners did not read at first: the radius cut gray-050 away to reveal
+           gray-050. Both selectors are needed to outrank Craft's own, which sets this
+           !important at `.details .meta:not(.read-only)` and again, more specifically, under
+           `#details`. A single class loses to both however many !importants it carries. */
+        .details .meta.dub-meta,
+        #details .details .meta.dub-meta {
+            background-color: hsla(var(--gray-150-hsl), 0.5) !important;
+            /* Craft gives every sidebar .meta a pane shadow. Here the panel is the well and the
+               key row is the thing raised out of it, so the shadow belongs on the row instead.
+               Left on both, the two stacked at the seam and read as one dark border. */
+            box-shadow: none !important;
+        }
+
+        /* Stated on the rows as well as the panel. Same colour, so it changes nothing when the
+           panel rule applies, but the readouts stay distinct from the key row if this ever
+           renders somewhere those selectors do not reach, such as a slideout. */
+        .dub-detail-field { background-color: hsla(var(--gray-150-hsl), 0.5); }
+
+        /* The key row gets the treatment Craft gives a whole pane, so it reads as raised out
+           of the well the rest of the panel now forms. --pane-shadow is a 1px ring plus a soft
+           drop shadow, which is what makes a pane look lifted rather than merely outlined.
+           The background stays the sidebar's own field colour rather than --pane-bg, which is
+           white: the lift comes from the shadow, not from going brighter. */
+        .dub-key-field {
+            background-color: var(--gray-050);
+            box-shadow: var(--pane-shadow);
+            border-radius: var(--large-border-radius);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* A focused row lifts above everything. Without this the recessed row below paints over
+           the input's focus ring, since later siblings paint on top, and the ring comes out
+           clipped along its bottom edge. */
+        .meta > .field:focus-within { position: relative; z-index: 2; }
+
+        /* Round off the bottom of the panel. The rows are full-bleed, since .meta gives them
+           negative inline margins, so only the bottom corners are ever visible. */
+        .meta > .dub-detail-field:last-child {
+            border-bottom-left-radius: var(--large-border-radius);
+            border-bottom-right-radius: var(--large-border-radius);
+        }
+{% endcss %}
+
 {% if qrUrl %}
     {# Opens the QR code in a Garnish modal rather than a new tab. Craft's own
        PreviewFileModal is asset-backed, and the QR is a remote Dub URL, so we
@@ -225,56 +281,6 @@
            their *contents* that get pulled to the top. Covers both layout modes the CP
            might be using: the align-* pair applies under flex, vertical-align under
            table-cell. */
-        /* The key input is the control. Link, Clicks and QR are readouts about it, so the
-           panel becomes a well with the key row raised out of it, rather than four rows of
-           equal weight. Done with colour and shadow rather than by restructuring: .meta lays
-           its rows out as flex with a fixed heading column, and wrapping them would lose that.
-
-           The panel carries the recessed colour so the key row's rounded corners have
-           something darker to cut into. Rounding it against a background identical to its own
-           is why the corners did not read at first: the radius cut gray-050 away to reveal
-           gray-050. Both selectors are needed to outrank Craft's own, which sets this
-           !important at `.details .meta:not(.read-only)` and again, more specifically, under
-           `#details`. A single class loses to both however many !importants it carries. */
-        .details .meta.dub-meta,
-        #details .details .meta.dub-meta {
-            background-color: hsla(var(--gray-150-hsl), 0.5) !important;
-            /* Craft gives every sidebar .meta a pane shadow. Here the panel is the well and the
-               key row is the thing raised out of it, so the shadow belongs on the row instead.
-               Left on both, the two stacked at the seam and read as one dark border. */
-            box-shadow: none !important;
-        }
-
-        /* Stated on the rows as well as the panel. Same colour, so it changes nothing when the
-           panel rule applies, but the readouts stay distinct from the key row if this ever
-           renders somewhere those selectors do not reach, such as a slideout. */
-        .dub-detail-field { background-color: hsla(var(--gray-150-hsl), 0.5); }
-
-        /* The key row gets the treatment Craft gives a whole pane, so it reads as raised out
-           of the well the rest of the panel now forms. --pane-shadow is a 1px ring plus a soft
-           drop shadow, which is what makes a pane look lifted rather than merely outlined.
-           The background stays the sidebar's own field colour rather than --pane-bg, which is
-           white: the lift comes from the shadow, not from going brighter. */
-        .dub-key-field {
-            background-color: var(--gray-050);
-            box-shadow: var(--pane-shadow);
-            border-radius: var(--large-border-radius);
-            position: relative;
-            z-index: 1;
-        }
-
-        /* A focused row lifts above everything. Without this the recessed row below paints over
-           the input's focus ring, since later siblings paint on top, and the ring comes out
-           clipped along its bottom edge. */
-        .meta > .field:focus-within { position: relative; z-index: 2; }
-
-        /* Round off the bottom of the panel. The rows are full-bleed, since .meta gives them
-           negative inline margins, so only the bottom corners are ever visible. */
-        .meta > .dub-detail-field:last-child {
-            border-bottom-left-radius: var(--large-border-radius);
-            border-bottom-right-radius: var(--large-border-radius);
-        }
-
         .dub-qr-field { align-items: stretch; }
         .dub-qr-field > .heading,
         .dub-qr-field > .input {
