@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Two user permissions, **View the Short Link panel** and **Edit the short link slug**, under a **Dub Links** heading.
+
 ### Changed
 - The **Short Link** sidebar panel now sets the slug field apart from the link, click count and QR code below it.
 

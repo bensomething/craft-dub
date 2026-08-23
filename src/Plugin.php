@@ -12,8 +12,10 @@ use craft\base\Plugin as BasePlugin;
 use craft\elements\Entry;
 use craft\events\DefineHtmlEvent;
 use craft\events\ModelEvent;
+use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\App;
 use craft\helpers\UrlHelper;
+use craft\services\UserPermissions;
 use craft\web\Controller;
 use yii\base\Event;
 
@@ -26,6 +28,20 @@ use yii\base\Event;
  */
 class Plugin extends BasePlugin
 {
+    /**
+     * Whether a user may see an entry's short link at all.
+     *
+     * Declared as constants rather than written out where they're used: a mistyped literal
+     * passes silently for admins, who hold every permission, and denies everyone else, so the
+     * one person likely to test it is the one person who cannot see the bug.
+     */
+    public const PERMISSION_VIEW_LINKS = 'dub:view-links';
+
+    /**
+     * Whether a user may set, change or clear an entry's short link slug.
+     */
+    public const PERMISSION_MANAGE_LINKS = 'dub:manage-links';
+
     public string $schemaVersion = '1.1.0';
     public bool $hasCpSettings = true;
 
@@ -47,6 +63,7 @@ class Plugin extends BasePlugin
 
         Craft::$app->getView()->registerTwigExtension(new DubTwigExtension());
 
+        $this->registerPermissions();
         $this->attachEventHandlers();
     }
 
@@ -95,6 +112,61 @@ class Plugin extends BasePlugin
         ]);
     }
 
+    private function registerPermissions(): void
+    {
+        Event::on(
+            UserPermissions::class,
+            UserPermissions::EVENT_REGISTER_PERMISSIONS,
+            static function(RegisterUserPermissionsEvent $event) {
+                $event->permissions[] = [
+                    'heading' => Craft::t('dub', 'Dub Links'),
+                    'permissions' => [
+                        self::PERMISSION_VIEW_LINKS => [
+                            'label' => Craft::t('dub', 'View the Short Link panel'),
+                            'nested' => [
+                                self::PERMISSION_MANAGE_LINKS => [
+                                    'label' => Craft::t('dub', 'Edit the short link slug'),
+                                ],
+                            ],
+                        ],
+                    ],
+                ];
+            },
+        );
+    }
+
+    /**
+     * Whether the current user may see short links.
+     *
+     * One gate per question, called from every surface that asks it, rather than the check
+     * written out at each. Separate copies drift, and the one that drifts is the one nobody
+     * looks at.
+     *
+     * Answers true when there is no user, which is a console command or a queue job. Those run
+     * with shell or system access already, and the permission system has nobody to ask about.
+     * The entry save path reads no request input in that case either, so there is nothing a
+     * permission could protect there.
+     */
+    public static function canViewLinks(): bool
+    {
+        return self::hasPermission(self::PERMISSION_VIEW_LINKS);
+    }
+
+    /**
+     * Whether the current user may set, change or clear a short link slug.
+     */
+    public static function canManageLinks(): bool
+    {
+        return self::hasPermission(self::PERMISSION_MANAGE_LINKS);
+    }
+
+    private static function hasPermission(string $permission): bool
+    {
+        $identity = Craft::$app->getUser()->getIdentity();
+
+        return $identity === null || $identity->can($permission);
+    }
+
     private function attachEventHandlers(): void
     {
         Event::on(Entry::class, Element::EVENT_BEFORE_SAVE, function(ModelEvent $event) {
@@ -116,6 +188,7 @@ class Plugin extends BasePlugin
             $readsRequest = self::readsLinkFields(
                 Craft::$app->getRequest()->getIsConsoleRequest(),
                 $entry->propagating,
+                self::canManageLinks(),
             );
             $customKey = $readsRequest ? Craft::$app->getRequest()->getBodyParam('dubCustomKey') ?: null : null;
             $shortLinkPresent = $readsRequest ? Craft::$app->getRequest()->getBodyParam('dubShortLinkPresent') : null;
@@ -227,6 +300,10 @@ class Plugin extends BasePlugin
                 return;
             }
 
+            if (!self::canViewLinks()) {
+                return;
+            }
+
             if (!$this->entrySectionHasUrls($entry, false)) {
                 return;
             }
@@ -268,6 +345,7 @@ class Plugin extends BasePlugin
                 'domain' => $domain,
                 'settingsUrl' => $settingsUrl,
                 'sectionEnabled' => $sectionEnabled,
+                'canManage' => self::canManageLinks(),
                 'isLive' => $entry->getStatus() === Entry::STATUS_LIVE,
                 'dubDashboardUrl' => $dubDashboardUrl,
                 'qrUrl' => $qrUrl,
@@ -296,6 +374,12 @@ class Plugin extends BasePlugin
     /**
      * Whether the Dub form fields in the request body apply to this save.
      *
+     * They don't for a user without the manage permission. Rendering the field read-only is
+     * not enough on its own: the params would still be posted by anyone willing to write the
+     * request by hand, and ignoring them here is what actually stops a link being renamed or
+     * deleted. It also means an editor without the permission can still save entries normally,
+     * and their links keep following their slugs, because that path reads no request input.
+     *
      * They don't on a console save, which has no request behind it. And they don't on a
      * propagated site element: propagation re-enters the before-save handler inside the same
      * request, so the params are still readable, but they describe the site the editor was
@@ -303,9 +387,9 @@ class Plugin extends BasePlugin
      * already assigned to the originating site on the same domain, and the resulting 4xx
      * fails the entire entry save through Craft's cross-site validation.
      */
-    private static function readsLinkFields(bool $isConsoleRequest, bool $isPropagating): bool
+    private static function readsLinkFields(bool $isConsoleRequest, bool $isPropagating, bool $canManage): bool
     {
-        return !$isConsoleRequest && !$isPropagating;
+        return !$isConsoleRequest && !$isPropagating && $canManage;
     }
 
     /**

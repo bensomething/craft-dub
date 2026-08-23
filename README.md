@@ -119,6 +119,17 @@ has actually changed and nothing for the rest.
 This is the counterpart to `dub/adopt`. Adoption brings links that exist at Dub under Craft's
 management, while `dub/check` looks the other way, at links Craft thinks it has.
 
+## Permissions
+
+Two permissions appear under **Settings → Users → Permissions**, in a **Dub Links** group:
+
+- **View the Short Link panel** shows it in the entry sidebar.
+- **Edit the short link slug** is nested under it.
+
+Without the second, the slug is shown but not editable, and a posted slug is ignored rather
+than applied. Links still follow their entries either way, so an editor without it saves
+normally and only loses the ability to rename or remove.
+
 ## Templating
 
 Use the `dubLink(entry)` Twig function to output a short link in your templates:
