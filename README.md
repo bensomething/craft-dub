@@ -32,9 +32,11 @@ php craft plugin/install dub
 
 ### Domains per site
 
-On a multi-site install the **General** tab also lists your sites, so each one can have its own
-short link domain. Leave a site blank and it uses the **Domain** above. Each field suggests your
-Dub domains and accepts an environment variable, exactly like the main one.
+The **General** tab also lists every site that has its own base URL, so each can have its own
+short link domain. Sites without one are left out, since their entries have no URLs to shorten,
+and the list only appears when more than one site qualifies. Leave a site blank and it uses the
+**Domain** above. Each field suggests your Dub domains and accepts an environment variable,
+exactly like the main one.
 
 This only affects links created or updated from then on. An existing link keeps the domain it
 was created on until its entry is next saved, so after changing a site's domain run:

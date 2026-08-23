@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- Each site on a multi-site install can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**.
+- Each site with its own base URL can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**.
 - Two user permissions, **View the Short Link panel** and **Edit the short link slug**, under a **Dub Links** heading.
 
 ### Changed
