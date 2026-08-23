@@ -47,7 +47,8 @@ passes every read and then fails the first time an editor saves an entry.
 The **General** tab also lists every site that has its own base URL, so each can have its own
 short link domain. Sites without one are left out, since their entries have no URLs to shorten,
 and the list only appears when more than one site qualifies. Leave a site blank and it uses the
-**Domain** above. Each field suggests your Dub domains and accepts an environment variable,
+**Domain** above, and so does one set to an environment variable that isn't defined in the
+current environment. Each field suggests your Dub domains and accepts an environment variable,
 exactly like the main one.
 
 This only affects links created or updated from then on. An existing link keeps the domain it

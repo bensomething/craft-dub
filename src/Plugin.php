@@ -131,7 +131,7 @@ class Plugin extends BasePlugin
         // than leaving someone to wonder why editing it changes nothing.
         $allSitesOverridden = $sites !== [] && !array_filter(
             $sites,
-            static fn($site): bool => ($overrides[$site->uid] ?? '') === '',
+            static fn($site): bool => !$settings->hasResolvedOverride($site->id),
         );
 
         /** @var Controller $controller */

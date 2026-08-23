@@ -221,4 +221,28 @@ class SettingsTest extends TestCase
             'nothing at all' => [[], []],
         ];
     }
+
+    #[DataProvider('resolveDomainProvider')]
+    public function testAnUnusableDomainSettingResolvesToNothing(string $value, ?string $expected): void
+    {
+        $method = new \ReflectionMethod(Settings::class, 'resolveDomain');
+        $method->setAccessible(true);
+
+        $this->assertSame($expected, $method->invoke(new Settings(), $value));
+    }
+
+    /** @return array<string, array{string, ?string}> */
+    public static function resolveDomainProvider(): array
+    {
+        return [
+            'a plain domain' => ['bms.so', 'bms.so'],
+            'blank' => ['', null],
+            // The case this exists for. An override pointing at a variable that is not set in
+            // this environment has to read as "nothing", so domainForSite() falls through to the
+            // default. Returning it verbatim would send a literal $VAR to Dub, and returning an
+            // empty string would leave the site with no domain at all, which goes unnoticed:
+            // prepareLink() omits an empty domain and Dub then uses its own workspace default.
+            'an environment variable that is not set here' => ['$DUB_DOMAIN_NOT_SET_ANYWHERE', null],
+        ];
+    }
 }

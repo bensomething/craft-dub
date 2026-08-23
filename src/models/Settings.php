@@ -162,9 +162,45 @@ class Settings extends Model
         $site = Craft::$app->getSites()->getSiteById($siteId);
         $override = $site !== null ? ($this->getSiteDomains()[$site->uid] ?? '') : '';
 
-        $value = Craft::parseEnv($override !== '' ? $override : $this->domain);
+        return $this->resolveDomain($override) ?? $this->resolveDomain($this->domain) ?? '';
+    }
 
-        return is_string($value) ? $value : '';
+    /**
+     * A domain setting resolved to something usable, or null.
+     *
+     * Null covers a blank value and an environment variable that is not set here, which are the
+     * same thing as far as this is concerned: nothing to use. Treating them alike is what lets
+     * an override fall back to the default rather than leaving the site with no domain, which
+     * would go unnoticed, since prepareLink() simply omits an empty domain and Dub then creates
+     * the link on whatever its workspace default happens to be.
+     */
+    private function resolveDomain(string $value): ?string
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        $resolved = Craft::parseEnv($value);
+
+        return is_string($resolved) && $resolved !== '' ? $resolved : null;
+    }
+
+    /**
+     * Whether this site's own domain is what gets used, rather than the default.
+     *
+     * An override pointing at an environment variable that is not set here does not count: the
+     * site falls back to the default, so saying otherwise would be wrong exactly when it
+     * matters.
+     */
+    public function hasResolvedOverride(int $siteId): bool
+    {
+        $site = Craft::$app->getSites()->getSiteById($siteId);
+
+        if ($site === null) {
+            return false;
+        }
+
+        return $this->resolveDomain($this->getSiteDomains()[$site->uid] ?? '') !== null;
     }
 
     /**
