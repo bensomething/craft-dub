@@ -1,15 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 - 2026-08-23
 
 ### Added
 - Each site with its own base URL can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**.
-- A **Test** button on the settings screen, and a `dub/test` console command, which create a short link, read it back, fetch its QR code and delete it again, reporting each step.
 - Two user permissions, **View the Short Link panel** and **Edit the short link slug**, under a **Dub Links** heading.
+- A **Test** button on the settings screen, and a `dub/test` console command, which create a short link, read it back, fetch its QR code and delete it again, reporting each step.
 
 ### Changed
-- `dub/adopt` now lists the first ten unmatched links and a count of the rest, rather than every one. Pass `--show-unmatched` for the full list.
 - The **Short Link** sidebar panel now sets the slug field apart from the link, click count and QR code below it.
+- `dub/adopt` now lists the first ten unmatched links and a count of the rest, rather than every one. Pass `--show-unmatched` for the full list.
 
 ## 1.4.0 - 2026-08-22
 
