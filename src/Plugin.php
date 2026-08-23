@@ -102,6 +102,24 @@ class Plugin extends BasePlugin
         $sites = Craft::$app->getSites()->getAllSites();
         $overrides = $settings->getSiteDomains();
 
+        // One list for every check below. getDomains() is a live API call with no cache, so
+        // asking per site would be a request per row on every render of this screen.
+        $available = array_column($domains, 'slug');
+
+        $domainWarning = $settings->domainWarning($settings->domain, $available);
+
+        // Resolved, so a row left blank shows the domain it will actually use rather than the
+        // variable name standing in for it.
+        $defaultDomain = Craft::parseEnv($settings->domain);
+
+        $siteDomainWarnings = [];
+        foreach ($sites as $site) {
+            $warning = $settings->domainWarning($overrides[$site->uid] ?? '', $available);
+            if ($warning !== null) {
+                $siteDomainWarnings[] = $site->name . ': ' . $warning;
+            }
+        }
+
         // With every site overridden the default is unreachable, which is worth saying rather
         // than leaving someone to wonder why editing it changes nothing.
         $allSitesOverridden = $sites !== [] && !array_filter(
@@ -122,6 +140,9 @@ class Plugin extends BasePlugin
             'sites' => $sites,
             'siteDomains' => $overrides,
             'allSitesOverridden' => $allSitesOverridden,
+            'domainWarning' => $domainWarning,
+            'defaultDomain' => is_string($defaultDomain) ? $defaultDomain : '',
+            'siteDomainWarning' => $siteDomainWarnings !== [] ? implode(' ', $siteDomainWarnings) : null,
             'isMultiSite' => Craft::$app->getIsMultiSite(),
         ]);
     }

@@ -2,7 +2,6 @@
 
 namespace bensomething\craftdub\models;
 
-use bensomething\craftdub\Plugin;
 use Craft;
 use craft\base\Model;
 
@@ -64,8 +63,6 @@ class Settings extends Model
     {
         return [
             [['apiKey', 'domain'], 'string'],
-            [['domain'], 'validateDomain'],
-            [['siteDomains'], 'validateSiteDomains'],
             [['qrViewMode'], 'in', 'range' => self::QR_VIEW_MODES],
             [['showClicks'], 'boolean'],
             [['sections'], 'filter', 'filter' => function($value) {
@@ -206,48 +203,41 @@ class Settings extends Model
         return array_values(array_unique($values));
     }
 
-    public function validateDomain(string $attribute): void
-    {
-        $value = $this->$attribute;
-
-        if (empty($value) || str_starts_with($value, '$')) {
-            return;
-        }
-
-        if (!$this->isAvailableDomain($value)) {
-            $this->addError($attribute, Craft::t('dub', 'That domain isn’t available in your Dub workspace.'));
-        }
-    }
-
     /**
-     * Holds the overrides to the same standard as the default domain, and names the site in the
-     * error, since the table gives one row per site and an unattributed error would not say
-     * which.
+     * Why a domain will not work, or null if it is fine.
+     *
+     * A warning rather than a validation error, for two reasons. The list of available domains
+     * comes from the Dub API, so an outage or a rate limit means it comes back empty and the
+     * check silently passes anyway: something that cannot be relied on to block should not be
+     * blocking. And an environment variable resolves differently per environment, so a value
+     * that is wrong on a laptop may be exactly right in production.
+     *
+     * Environment variables are resolved first and the result is what gets checked, so one
+     * pointing somewhere that is not a Dub domain is caught rather than waved through for
+     * beginning with a `$`. One that resolves to nothing is left alone, since it is presumably
+     * set somewhere this is not.
+     *
+     * @param list<string> $available Domain slugs in the workspace. Empty means unknown, not none.
      */
-    public function validateSiteDomains(string $attribute): void
+    public function domainWarning(string $value, array $available): ?string
     {
-        foreach ($this->getSiteDomains() as $uid => $domain) {
-            if (str_starts_with($domain, '$') || $this->isAvailableDomain($domain)) {
-                continue;
-            }
-
-            $site = Craft::$app->getSites()->getSiteByUid($uid);
-
-            $this->addError($attribute, Craft::t('dub', '{domain} isn’t available in your Dub workspace ({site}).', [
-                'domain' => $domain,
-                'site' => $site->name ?? $uid,
-            ]));
+        if ($value === '' || $available === []) {
+            return null;
         }
-    }
 
-    /**
-     * Whether Dub has this domain. Answers true when the workspace can't be read at all, so a
-     * missing or unreachable API key blocks nothing: the save is not the place to find out.
-     */
-    private function isAvailableDomain(string $domain): bool
-    {
-        $domains = Plugin::getInstance()->dub->getDomains();
+        $resolved = Craft::parseEnv($value);
 
-        return empty($domains) || in_array($domain, array_column($domains, 'slug'), true);
+        if (!is_string($resolved) || $resolved === '' || in_array($resolved, $available, true)) {
+            return null;
+        }
+
+        if ($resolved !== $value) {
+            return Craft::t('dub', '{value} resolves to {domain}, which isn’t in your Dub workspace.', [
+                'value' => $value,
+                'domain' => $resolved,
+            ]);
+        }
+
+        return Craft::t('dub', '{domain} isn’t in your Dub workspace.', ['domain' => $resolved]);
     }
 }

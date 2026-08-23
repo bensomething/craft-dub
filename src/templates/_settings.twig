@@ -64,7 +64,7 @@
                 instructions: 'Select the short link domain to use, or set it from an environment variable. Available domains load after saving your API key.' | t('dub'),
                 warning: allSitesOverridden
                     ? 'Every site has its own domain below, so this one is not used.' | t('dub')
-                    : null,
+                    : domainWarning,
             }) }}
 
             {% if isMultiSite %}
@@ -81,6 +81,7 @@
                             id: 'siteDomains-' ~ site.uid,
                             name: 'siteDomains[' ~ site.uid ~ ']',
                             value: siteDomains[site.uid] ?? '',
+                            placeholder: defaultDomain,
                             suggestions: domainData ? [{ label: 'Domains' | t('dub'), data: domainData }] : [],
                             suggestEnvVars: true,
                         } only %}
@@ -104,9 +105,15 @@
                 </style>
 
                 <div class="dub-site-domains">
+                {# The tip sits on the table rather than on each row. The per-site inputs are
+                   raw autosuggest includes, so they support environment variables without the
+                   tip the field wrapper adds, and repeating it per row would print it once per
+                   site. #}
                 {{ forms.editableTableField({
                     label: 'Domains per site' | t('dub'),
                     instructions: 'Leave a site blank to use the domain above.' | t('dub'),
+                    tip: 'These can begin with an environment variable.' | t('dub'),
+                    warning: siteDomainWarning,
                     id: 'siteDomains',
                     name: 'siteDomains',
                     cols: {
