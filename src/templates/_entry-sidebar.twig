@@ -137,6 +137,16 @@
             z-index: 1;
         }
 
+        /* In a slideout the surrounding fields are plain rows with no pane treatment of their
+           own, so a raised card reads as something that wandered in from another screen rather
+           than as a hierarchy. Flatten it there and let the recessed rows below carry the
+           distinction on their own. */
+        .so-sidebar .dub-key-field {
+            background-color: transparent;
+            box-shadow: none;
+            border-radius: 0;
+        }
+
         /* A focused row lifts above everything. Without this the recessed row below paints over
            the input's focus ring, since later siblings paint on top, and the ring comes out
            clipped along its bottom edge. */
