@@ -46,6 +46,7 @@
                 suggestEnvVars: true,
                 required: true,
                 errors: settings.getErrors('apiKey'),
+                warning: apiKeyWarning,
                 instructions: 'Enter your Dub API key. <a class="go" href="https://dub.co/docs/api-reference/authentication#api-keys" target="_blank" rel="noopener">Learn more</a>' | t('dub'),
             }) }}
 

@@ -257,13 +257,22 @@ class Settings extends Model
      */
     public function domainWarning(string $value, array $available): ?string
     {
-        if ($value === '' || $available === []) {
+        if ($value === '') {
             return null;
         }
 
-        $resolved = Craft::parseEnv($value);
+        $resolved = $this->resolveDomain($value);
 
-        if (!is_string($resolved) || $resolved === '' || in_array($resolved, $available, true)) {
+        // Checked before the workspace, because it needs no domain list and is true regardless
+        // of whether one could be fetched. Not an error: a site falls back to the default and a
+        // link still gets made. But silence would leave no way to tell that the override is
+        // doing nothing here, which is the whole reason it looks like it is set.
+        if ($resolved === null) {
+            return Craft::t('dub', '{value} isn’t set in this environment.', ['value' => $value]);
+        }
+
+        // Empty means the workspace could not be read, not that it holds no domains.
+        if ($available === [] || in_array($resolved, $available, true)) {
             return null;
         }
 

@@ -662,11 +662,17 @@ class DubService extends Component
             return $steps;
         }
 
+        // Naming both halves when they differ, since on the command line there is no field to
+        // look at and "Europe/London is not in the workspace" would not say where that came
+        // from. The settings screen words it the same way.
+        $configured = $settings->domain;
+        $named = $configured !== $domain ? $configured . ' resolves to ' . $domain : $domain;
+
         $domainOk = in_array($domain, $available, true);
         $steps[] = [
             'step' => 'Domain',
             'ok' => $domainOk,
-            'detail' => $domainOk ? $domain : $domain . ' is not in the workspace',
+            'detail' => $domainOk ? $named : $named . ', which is not in the workspace',
         ];
 
         if (!$domainOk) {

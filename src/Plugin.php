@@ -113,6 +113,13 @@ class Plugin extends BasePlugin
         // asking per site would be a request per row on every render of this screen.
         $available = array_column($domains, 'slug');
 
+        // Without a domain list nothing below can check a domain against the workspace, so all
+        // of those warnings fall silent and the screen reads as approval. Say so here instead,
+        // and point at the test, which gives the actual reason.
+        $apiKeyWarning = $available === [] && !empty(Craft::parseEnv($settings->apiKey))
+            ? Craft::t('dub', 'No domains could be read from your Dub workspace, so the domains below cannot be checked. Run the connection test to see why.')
+            : null;
+
         $domainWarning = $settings->domainWarning($settings->domain, $available);
 
         // Resolved, so a row left blank shows the domain it will actually use rather than the
@@ -147,6 +154,7 @@ class Plugin extends BasePlugin
             'sites' => $sites,
             'siteDomains' => $overrides,
             'allSitesOverridden' => $allSitesOverridden,
+            'apiKeyWarning' => $apiKeyWarning,
             'domainWarning' => $domainWarning,
             'defaultDomain' => is_string($defaultDomain) ? $defaultDomain : '',
             'siteDomainWarning' => $siteDomainWarnings !== [] ? implode(' ', $siteDomainWarnings) : null,
