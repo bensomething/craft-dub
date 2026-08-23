@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The **Short Link** sidebar panel now sets the slug field apart from the link, click count and QR code below it.
+
 ## 1.4.0 - 2026-08-22
 
 ### Added
