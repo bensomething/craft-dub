@@ -3,8 +3,12 @@
 ## Unreleased
 
 ### Added
+- Each site on a multi-site install can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**.
+- Two user permissions, **View the Short Link panel** and **Edit the short link slug**, under a **Dub Links** heading.
+
+### Changed
 - `dub/adopt` now lists the first ten unmatched links and a count of the rest, rather than every one. Pass `--show-unmatched` for the full list.
-- Each site on a multi-site install can now have its own short link domain, set on the **General** settings tab. Sites left blank use the main **Domain**. `dub/adopt` scans each configured domain in turn, and `dub/check` compares every link against its own site's domain.
+- The **Short Link** sidebar panel now sets the slug field apart from the link, click count and QR code below it.
 
 ## 1.4.0 - 2026-08-22
 

@@ -12,21 +12,22 @@ use ReflectionMethod;
  */
 class LinkFieldGatingTest extends TestCase
 {
-    private function readsLinkFields(bool $isConsoleRequest, bool $isPropagating): bool
+    private function readsLinkFields(bool $isConsoleRequest, bool $isPropagating, bool $canManage): bool
     {
         $method = new ReflectionMethod(Plugin::class, 'readsLinkFields');
         $method->setAccessible(true);
 
-        return $method->invoke(null, $isConsoleRequest, $isPropagating);
+        return $method->invoke(null, $isConsoleRequest, $isPropagating, $canManage);
     }
 
     #[DataProvider('gatingProvider')]
     public function testTheRequestIsOnlyReadOnAnEditorsOwnSave(
         bool $isConsoleRequest,
         bool $isPropagating,
+        bool $canManage,
         bool $expected,
     ): void {
-        $this->assertSame($expected, $this->readsLinkFields($isConsoleRequest, $isPropagating));
+        $this->assertSame($expected, $this->readsLinkFields($isConsoleRequest, $isPropagating, $canManage));
     }
 
     private function actsOnLifecycleOf(bool $isDraft, bool $isRevision): bool
@@ -59,18 +60,23 @@ class LinkFieldGatingTest extends TestCase
         ];
     }
 
-    /** @return array<string, array{bool, bool, bool}> */
+    /** @return array<string, array{bool, bool, bool, bool}> */
     public static function gatingProvider(): array
     {
         return [
-            'the editor saving the entry they are on' => [false, false, true],
+            'the editor saving the entry they are on' => [false, false, true, true],
+            // The server-side half of the permission. Rendering the field read-only stops the
+            // honest path only: without this the params still arrive from a hand-written
+            // request, and a link could be renamed or deleted by someone with no right to.
+            'an editor without the manage permission' => [false, false, false, false],
             // Propagation re-enters the before-save handler in the same request, so the body
             // params are still readable — but the custom key belongs to the originating site.
             // Replaying it PATCHes this site's link with a key Dub already assigned to the
             // other one on the same domain, and the 4xx fails the whole entry save.
-            'a propagated site element' => [false, true, false],
-            'a console save, which has no request' => [true, false, false],
-            'a console save that also propagates' => [true, true, false],
+            'a propagated site element' => [false, true, true, false],
+            'a console save, which has no request' => [true, false, true, false],
+            'a console save that also propagates' => [true, true, true, false],
+            'every reason at once' => [true, true, false, false],
         ];
     }
 }

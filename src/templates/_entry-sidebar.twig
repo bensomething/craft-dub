@@ -1,9 +1,9 @@
 {% if isLive %}
 <fieldset>
     <legend class="h6">{{ 'Short Link' | t('dub') }}</legend>
-    <div class="meta">
+    <div class="meta dub-meta">
         {% if isLive and sectionEnabled %}
-        <div class="field">
+        <div class="field dub-key-field">
             <div class="heading">
                 {%- if hasApiKey and hasDomain -%}
                     {{ domain }}
@@ -17,14 +17,28 @@
                 {% elseif not hasDomain %}
                     <a href="{{ settingsUrl }}">{{ 'Select a Domain' | t('dub') }}</a>
                 {% else %}
-                    {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
-                    <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}">
+                    {# Without the manage permission the slug is shown but not editable. The
+                       real gate is server-side: the before-save handler ignores these params
+                       for a user who lacks it, so a hand-written request gets no further than
+                       this does. #}
+                    {% if not canManage %}
+                        {# A disabled input rather than text, so it matches the other read-only
+                           rows exactly, all from Craft rather than approximated here. Both the
+                           attribute and the class: the attribute stops the input and sets the
+                           cursor, while the muting comes from Craft's `.disabled` class, which
+                           is an opacity rather than a colour. It posts nothing either way, and
+                           the before-save handler ignores the field regardless. #}
+                        <input type="text" class="text disabled" value="{{ currentKey ?? '' }}" disabled>
+                    {% else %}
+                        {% if shortLink %}<input type="hidden" name="dubShortLinkPresent" value="1">{% endif %}
+                        <input type="text" class="text" name="dubCustomKey" value="{{ currentKey ?? '' }}">
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
         {% endif %}
         {% if shortLink %}
-            <div class="field">
+            <div class="field dub-detail-field first-child">
                 <div class="heading">{{ 'Link' | t('dub') }}</div>
                 <div class="input flex flex-nowrap" style="align-items: center; justify-content: space-between; gap: 6px;">
                     <a href="{{ shortLink }}" target="_blank" rel="noopener" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">{{ shortLink | replace('https://', '') }}</a>
@@ -63,7 +77,7 @@
                 </div>
             </div>
             {% if clicks is not null %}
-                <div class="field">
+                <div class="field dub-detail-field">
                     <div class="heading">{{ 'Clicks' | t('dub') }}</div>
                     <div class="input">
                         {{ (clicks == 1 ? '{n} click' : '{n} clicks') | t('dub', { n: clicks }) }}
@@ -71,7 +85,7 @@
                 </div>
             {% endif %}
             {% if qrUrl and qrViewMode == 'full' %}
-                <div class="field dub-qr-field">
+                <div class="field dub-detail-field dub-qr-field">
                     <div class="heading">{{ 'QR Code' | t('dub') }}</div>
                     <div class="input flex flex-nowrap" style="align-items: flex-start; justify-content: space-between; gap: 8px;">
                         <a href="{{ qrUrl }}" target="_blank" rel="noopener"
@@ -94,6 +108,96 @@
         {% endif %}
     </div>
 </fieldset>
+{# The panel styling always applies. It lived in the block below until the QR display
+   being set to None meant no qrUrl, no block, and a sidebar that silently reverted to
+   Craft's default rows. That block is for the QR modal, which genuinely only matters when
+   there is a QR code. #}
+{% css %}
+        /* The key input is the control. Link, Clicks and QR are readouts about it, so the
+           panel becomes a well with the key row raised out of it, rather than four rows of
+           equal weight. Done with colour and shadow rather than by restructuring: .meta lays
+           its rows out as flex with a fixed heading column, and wrapping them would lose that.
+
+           The panel carries the recessed colour so the key row's rounded corners have
+           something darker to cut into. Rounding it against a background identical to its own
+           is why the corners did not read at first: the radius cut gray-050 away to reveal
+           gray-050. Both selectors are needed to outrank Craft's own, which sets this
+           !important at `.details .meta:not(.read-only)` and again, more specifically, under
+           `#details`. A single class loses to both however many !importants it carries. */
+        .details .meta.dub-meta,
+        #details .details .meta.dub-meta {
+            background-color: hsla(var(--gray-150-hsl), 0.5) !important;
+            /* Craft gives every sidebar .meta a pane shadow. Here the panel is the well and the
+               key row is the thing raised out of it, so the shadow belongs on the row instead.
+               Left on both, the two stacked at the seam and read as one dark border. */
+            box-shadow: none !important;
+        }
+
+        /* Stated on the rows as well as the panel. Same colour, so it changes nothing when the
+           panel rule applies, but the readouts stay distinct from the key row if this ever
+           renders somewhere those selectors do not reach, such as a slideout. */
+        .dub-detail-field { background-color: hsla(var(--gray-150-hsl), 0.5); }
+
+        /* The key row gets the treatment Craft gives a whole pane, so it reads as raised out
+           of the well the rest of the panel now forms. --pane-shadow is a 1px ring plus a soft
+           drop shadow, which is what makes a pane look lifted rather than merely outlined.
+           The background stays the sidebar's own field colour rather than --pane-bg, which is
+           white: the lift comes from the shadow, not from going brighter. */
+        .dub-key-field {
+            background-color: var(--gray-050);
+            box-shadow: var(--pane-shadow);
+            border-radius: var(--large-border-radius);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* A slideout keeps the recessed readouts but loses the raised key row. Its fields are
+           plain rows on the default background, so a card reads as a component from another
+           screen, while the well still separates the control from the readouts about it.
+
+           The panel goes back to Craft's colour so the key row, now transparent, matches the
+           fields above it. The readouts paint their own darker colour over that.
+
+           Ordering matters as much as the selectors: this ties the panel rule above at 0,3,0
+           and wins by coming after it. The #details variant above is more specific still, but
+           a slideout has no #details ancestor for it to match. */
+        .so-sidebar .meta.dub-meta {
+            background-color: var(--gray-050) !important;
+        }
+
+        /* Two 50% layers compose to 75%, which is what the readouts get on the entry page:
+           their own colour over a panel painted the same. Here the panel is back to Craft's,
+           so a single 50% pass lands lighter. State the composite instead. */
+        .so-sidebar .dub-detail-field {
+            background-color: hsla(var(--gray-150-hsl), 0.75);
+        }
+
+        /* The Link row carries Craft's `first-child` class to suppress the divider above it,
+           which is right under a raised card and wrong under a plain row. Put it back here,
+           since without it the first two rows read as one. */
+        .so-sidebar .dub-detail-field.first-child {
+            border-block-start: 1px solid var(--border-hairline);
+        }
+
+        .so-sidebar .dub-key-field {
+            background-color: transparent;
+            box-shadow: none;
+            border-radius: 0;
+        }
+
+        /* A focused row lifts above everything. Without this the recessed row below paints over
+           the input's focus ring, since later siblings paint on top, and the ring comes out
+           clipped along its bottom edge. */
+        .meta > .field:focus-within { position: relative; z-index: 2; }
+
+        /* Round off the bottom of the panel. The rows are full-bleed, since .meta gives them
+           negative inline margins, so only the bottom corners are ever visible. */
+        .meta > .dub-detail-field:last-child {
+            border-bottom-left-radius: var(--large-border-radius);
+            border-bottom-right-radius: var(--large-border-radius);
+        }
+{% endcss %}
+
 {% if qrUrl %}
     {# Opens the QR code in a Garnish modal rather than a new tab. Craft's own
        PreviewFileModal is asset-backed, and the QR is a remote Dub URL, so we
