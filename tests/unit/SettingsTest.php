@@ -192,4 +192,33 @@ class SettingsTest extends TestCase
             'not an array at all' => ['nonsense', []],
         ];
     }
+
+    #[DataProvider('distinctDomainProvider')]
+    public function testConfiguredDomainsAreDeduplicatedAndBlanksDropped(array $values, array $expected): void
+    {
+        $method = new \ReflectionMethod(Settings::class, 'distinctDomains');
+        $method->setAccessible(true);
+
+        $this->assertSame($expected, $method->invoke(null, $values));
+    }
+
+    /** @return array<string, array{array<mixed>, list<string>}> */
+    public static function distinctDomainProvider(): array
+    {
+        return [
+            'the usual case' => [['bms.so', 'gla.st', 'fg.wtf'], ['bms.so', 'gla.st', 'fg.wtf']],
+            // Adoption pages the whole workspace once per domain, so a duplicate is a full
+            // redundant scan rather than a cosmetic problem.
+            'a site set to the same domain as the default' => [['bms.so', 'bms.so'], ['bms.so']],
+            'several sites sharing an override' => [['bms.so', 'gla.st', 'gla.st'], ['bms.so', 'gla.st']],
+            // A blank would leave the domain filter off entirely, so that pass would consider
+            // every link in the workspace, including ones on domains nothing here manages.
+            'no domain configured at all' => [[''], []],
+            'an unresolved environment variable' => [['bms.so', null, false], ['bms.so']],
+            // array_unique preserves the first occurrence, and the keys have to be reset or the
+            // list comes back with holes in it.
+            'keys are reindexed' => [['', 'gla.st', '', 'bms.so'], ['gla.st', 'bms.so']],
+            'nothing at all' => [[], []],
+        ];
+    }
 }

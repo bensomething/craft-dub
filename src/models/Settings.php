@@ -186,9 +186,24 @@ class Settings extends Model
             $domains[] = Craft::parseEnv($override);
         }
 
-        $domains = array_filter($domains, static fn($domain): bool => is_string($domain) && $domain !== '');
+        return self::distinctDomains($domains);
+    }
 
-        return array_values(array_unique($domains));
+    /**
+     * Drops blanks and duplicates from a list of resolved domains.
+     *
+     * Both matter to adoption, which pages the whole workspace once per domain. A duplicate
+     * costs an entire redundant scan, and a blank costs an unfiltered pass that considers every
+     * link in the workspace. Neither surfaces as an error, only as a slower run.
+     *
+     * @param array<mixed> $values
+     * @return list<string>
+     */
+    private static function distinctDomains(array $values): array
+    {
+        $values = array_filter($values, static fn($value): bool => is_string($value) && $value !== '');
+
+        return array_values(array_unique($values));
     }
 
     public function validateDomain(string $attribute): void
