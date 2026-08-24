@@ -1,6 +1,7 @@
 {# @var summary array #}
 {# @var fix bool #}
 {# @var canRepair bool #}
+{# @var settingsUrl string #}
 
 {# Rendered once, when the last slice lands, from the totals carried across the whole run. #}
 
@@ -9,13 +10,12 @@
    open a row, and a repair folds into the row that found it. #}
 {% set findings = summary.missing + summary.drifted + summary.stale + summary.unreadable %}
 
-{# What can actually be done about what was found. Both halves are conditional, and there are
-   real runs where neither holds: findings that are only unreadable have no remedy to offer, a
-   user without the repair permission is not going to be told to press a button they cannot
-   see, and a repair that fixed everything leaves nothing to say. So the heading hangs off this
-   rather than off there being findings at all. #}
+{# What can actually be done about what was found. Every line is conditional, and there are
+   still runs where none of them hold: a user without the repair permission is not going to be
+   told to press a button they cannot see, and a repair that fixed everything leaves nothing to
+   say. So the heading hangs off this rather than off there being findings at all. #}
 {% set offerRepair = not fix and canRepair and (summary.missing or summary.drifted) %}
-{% set showFix = offerRepair or summary.stale %}
+{% set showFix = offerRepair or summary.unrepaired or summary.stale or summary.unreadable %}
 
 {% if summary.error %}
     <p class="error">{{ summary.error }}</p>
@@ -28,7 +28,7 @@
 {% else %}
     <hr>
 
-    <h2>{{ 'Result' | t('dub') }}</h2>
+    <h3>{{ 'Result' | t('dub') }}</h3>
 
     {# Detections first, then what was done about them, so a row that drifted and could not be
        repaired appears once on each side rather than twice in one count. #}
@@ -49,12 +49,20 @@
     {% endif %}
 
     {% if showFix %}
-        <h2>{{ 'How to fix' | t('dub') }}</h2>
+        <h3>{{ 'How to fix' | t('dub') }}</h3>
 
         {% if offerRepair %}
             {# The button's name is passed in rather than bolded around a split string, so a
                translator still gets a whole sentence to work with. #}
             <p>{{ 'Use {button} to recreate the missing links and reconcile the drifted ones.' | t('dub', {
+                button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
+            }) | raw }}</p>
+        {% endif %}
+
+        {% if summary.unrepaired %}
+            {# The reason sits in the row, since it is per link and often different each time.
+               What belongs here is only what to do once it has been read. #}
+            <p>{{ 'Repairs that did not take give their reason above. Put that right at Dub, then run {button} again.' | t('dub', {
                 button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
             }) | raw }}</p>
         {% endif %}
@@ -66,6 +74,14 @@
                something to translate, and the full stop stays outside the code element. #}
             <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run {command}.' | t('dub', {
                 command: '<code>php craft resave/entries</code>',
+            }) | raw }}</p>
+        {% endif %}
+
+        {% if summary.unreadable %}
+            {# Unreadable is the API failing rather than anything being wrong with the link, so
+               the remedy is about the connection, not the entry. #}
+            <p>{{ 'Links that could not be read give their reason above. Run the connection test on the {link} to check the API key and the workspace.' | t('dub', {
+                link: '<a href="' ~ settingsUrl ~ '">' ~ ('settings screen' | t('dub')) ~ '</a>',
             }) | raw }}</p>
         {% endif %}
     {% endif %}

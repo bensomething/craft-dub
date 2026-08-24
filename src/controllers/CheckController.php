@@ -11,6 +11,7 @@ use craft\enums\Color;
 use craft\helpers\App;
 use craft\helpers\Cp;
 use craft\helpers\Html;
+use craft\helpers\UrlHelper;
 use craft\web\Controller;
 use yii\web\Response;
 
@@ -121,6 +122,9 @@ class CheckController extends Controller
                     'summary' => $totals,
                     'fix' => $fix,
                     'canRepair' => Plugin::canManageLinks(),
+                    // A link Dub wouldn't answer for is usually the key or the workspace, and
+                    // the connection test names which. Pointing at it beats describing it.
+                    'settingsUrl' => UrlHelper::cpUrl('settings/plugins/dub'),
                 ])
                 : null,
             'totals' => $totals,
