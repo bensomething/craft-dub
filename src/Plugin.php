@@ -5,17 +5,23 @@ namespace bensomething\craftdub;
 use bensomething\craftdub\models\Settings;
 use bensomething\craftdub\services\DubService;
 use bensomething\craftdub\twigextensions\DubTwigExtension;
+use bensomething\craftdub\utilities\CheckLinks;
 use Craft;
 use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\elements\Entry;
+use craft\events\DefineAttributeHtmlEvent;
 use craft\events\DefineHtmlEvent;
 use craft\events\ModelEvent;
+use craft\events\RegisterComponentTypesEvent;
+use craft\events\RegisterElementTableAttributesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\App;
+use craft\helpers\Html;
 use craft\helpers\UrlHelper;
 use craft\services\UserPermissions;
+use craft\services\Utilities;
 use craft\web\Controller;
 use yii\base\Event;
 
@@ -42,6 +48,11 @@ class Plugin extends BasePlugin
      */
     public const PERMISSION_MANAGE_LINKS = 'dub:manage-links';
 
+    /**
+     * The entries index column, opt-in from the index's column customiser.
+     */
+    private const TABLE_ATTRIBUTE = 'dubShortLink';
+
     public string $schemaVersion = '1.1.0';
     public bool $hasCpSettings = true;
 
@@ -64,6 +75,8 @@ class Plugin extends BasePlugin
         Craft::$app->getView()->registerTwigExtension(new DubTwigExtension());
 
         $this->registerPermissions();
+        $this->registerUtilities();
+        $this->registerEntryIndexColumn();
         $this->attachEventHandlers();
     }
 
@@ -181,6 +194,89 @@ class Plugin extends BasePlugin
                         ],
                     ],
                 ];
+            },
+        );
+    }
+
+    private function registerUtilities(): void
+    {
+        Event::on(
+            Utilities::class,
+            Utilities::EVENT_REGISTER_UTILITIES,
+            static function(RegisterComponentTypesEvent $event) {
+                $event->types[] = CheckLinks::class;
+            },
+        );
+    }
+
+    /**
+     * Adds an opt-in Short Link column to the entries index.
+     *
+     * Not a default column. The index belongs to whoever set it up, and a plugin helping itself
+     * to a column on every entries screen in the install is not a favour. This puts it in the
+     * customiser for the people who want it.
+     *
+     * Registered unconditionally rather than behind a CP-request check: the attribute list is
+     * read in contexts other than a rendered index, and a registration that only exists for
+     * some of them is a registration that disappears without saying so.
+     */
+    private function registerEntryIndexColumn(): void
+    {
+        Event::on(
+            Entry::class,
+            Element::EVENT_REGISTER_TABLE_ATTRIBUTES,
+            static function(RegisterElementTableAttributesEvent $event) {
+                if (!self::canViewLinks()) {
+                    return;
+                }
+
+                $event->tableAttributes[self::TABLE_ATTRIBUTE] = [
+                    'label' => Craft::t('dub', 'Short Link'),
+                ];
+            },
+        );
+
+        Event::on(
+            Entry::class,
+            Element::EVENT_DEFINE_ATTRIBUTE_HTML,
+            static function(DefineAttributeHtmlEvent $event) {
+                if ($event->attribute !== self::TABLE_ATTRIBUTE) {
+                    return;
+                }
+
+                // Always answered, even when the answer is nothing. Returning without setting
+                // html hands the attribute back to Element::attributeHtml(), whose default
+                // branch reads $this->$attribute and throws on a property no element has.
+                $event->handled = true;
+                $event->html = '';
+
+                if (!self::canViewLinks()) {
+                    return;
+                }
+
+                /** @var Entry $entry */
+                $entry = $event->sender;
+                $entryId = $entry->getCanonicalId();
+                if (!$entryId) {
+                    return;
+                }
+
+                // The site's whole set at once, memoized. An index page is up to a hundred rows
+                // and each one asks this, so a lookup per row would be a hundred queries.
+                $shortLink = Plugin::getInstance()->dub->getShortLinksForSite($entry->siteId)[$entryId] ?? null;
+                if ($shortLink === null) {
+                    return;
+                }
+
+                // Shown without the scheme, matching the sidebar panel, since the whole point of
+                // a short link is that it is short enough to read at a glance. Encoded on the
+                // way in: Html::a() leaves its body alone, and an index cell is rendered raw.
+                $label = (string)preg_replace('#^https?://#', '', $shortLink);
+
+                $event->html = Html::a(Html::encode($label), $shortLink, [
+                    'target' => '_blank',
+                    'rel' => 'noopener',
+                ]);
             },
         );
     }

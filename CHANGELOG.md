@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A **Short Link** column for the entries index, off by default and added from **Customize sources**.
+- A **Dub Links** utility, which runs the `dub/check` report in the control panel and can repair what it finds.
+
 ## 1.5.0 - 2026-08-23
 
 ### Added

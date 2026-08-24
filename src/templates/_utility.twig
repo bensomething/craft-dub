@@ -1,0 +1,102 @@
+{# @var hasApiKey bool #}
+{# @var settingsUrl string #}
+{# @var canRepair bool #}
+
+{% if not hasApiKey %}
+    {# The field's name is passed in rather than bolded around a split string, so a translator
+       still gets a whole sentence to work with. #}
+    <p>{{ 'Add your Dub {label} before checking links.' | t('dub', {
+            label: '<strong>' ~ ('API Key' | t('dub')) ~ '</strong>',
+        }) | raw }}
+        <a href="{{ settingsUrl }}">{{ "Go to the plugin's settings." | t('dub') }}</a></p>
+{% else %}
+    <p><strong>{{ 'Check links' | t('dub') }}</strong>
+        {{ 'runs every short link recorded here against Dub, and reports:' | t('dub') }}</p>
+
+    <ul class="bullets">
+        <li>{{ 'links that are missing' | t('dub') }}</li>
+        <li>{{ 'links that have been edited at Dub' | t('dub') }}</li>
+        <li>{{ 'links that no longer point where their entry lives' | t('dub') }}</li>
+    </ul>
+
+    {% if canRepair %}
+        <p><strong>{{ 'Repair links' | t('dub') }}</strong>
+            {{ 'recreates the missing links and reconciles the edited ones.' | t('dub') }}</p>
+
+        {# The label stays outside the translated string, so a translator gets a sentence to
+           work with rather than a sentence with markup wrapped around part of it. #}
+        <ul class="bullets">
+            <li><strong>{{ 'Destination URL' | t('dub') }}:</strong>
+                {{ 'Craft owns this, so its value is pushed back to Dub.' | t('dub') }}</li>
+            <li><strong>{{ 'Short link slug' | t('dub') }}:</strong>
+                {{ 'Dub owns this, so a rename made there is adopted here rather than reversed.' | t('dub') }}</li>
+        </ul>
+    {% endif %}
+
+    {# Full bleed on its own. The utility's content is rendered straight into the content
+       pane, so this is a real `.content-pane > hr` and Craft's own negative inline margin
+       applies. The settings screen has to restate that rule because its hrs sit a level
+       deeper, inside a tab panel. #}
+    <hr>
+
+    {# Craft's own `.buttons` margin is the gap before the results, and dead space at the foot
+       of the pane when there are none. So it is kept, and dropped only while there is nothing
+       under it, by a class the script puts on and takes off.
+
+       Both CSS-only versions of this failed, and for the same underlying reason: each asked a
+       selector to react to content injected by script. `:has(+ #dub-check-results:empty)` left
+       the collapsed margin applied after the container filled, and moving the gap onto
+       `#dub-check-results > :first-child` never landed on the injected first child at all. A
+       class on the element whose margin is in question has nothing to get wrong. #}
+    <style>.dub-buttons.dub-no-results { margin-block-end: 0 }</style>
+
+    <div class="buttons dub-buttons dub-no-results">
+        {# Two buttons rather than a switch beside one: repairing writes to Dub, and an action
+           that reaches a third party should say so on the control that starts it. #}
+        <button type="button" class="btn submit dub-check-btn" data-fix="0">{{ 'Check links' | t('dub') }}</button>
+        {% if canRepair %}
+            <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
+        {% endif %}
+        <div id="dub-check-spinner" class="spinner hidden"></div>
+    </div>
+
+    <div id="dub-check-results"></div>
+
+    {% js %}
+        (function() {
+            var $buttons = $('.dub-check-btn');
+            var $buttonRow = $('.dub-buttons');
+            var $spinner = $('#dub-check-spinner');
+            var $results = $('#dub-check-results');
+            var confirmRepair = {{ 'Recreate deleted links and re-point edited ones to match Craft?' | t('dub') | json_encode | raw }};
+            var failed = {{ 'The check could not be run.' | t('dub') | json_encode | raw }};
+
+            $buttons.on('click', function(ev) {
+                ev.preventDefault();
+
+                var fix = $(this).data('fix') === 1;
+                if (fix && !confirm(confirmRepair)) {
+                    return;
+                }
+
+                $buttons.addClass('disabled').attr('disabled', true);
+                $spinner.removeClass('hidden');
+                $results.html('');
+                $buttonRow.addClass('dub-no-results');
+
+                Craft.sendActionRequest('POST', 'dub/check/run', { data: { fix: fix ? 1 : 0 } })
+                    .then(function(response) {
+                        $results.html(response.data.html);
+                        $buttonRow.removeClass('dub-no-results');
+                    })
+                    .catch(function(e) {
+                        Craft.cp.displayError((e && e.response && e.response.data && e.response.data.message) || failed);
+                    })
+                    .then(function() {
+                        $spinner.addClass('hidden');
+                        $buttons.removeClass('disabled').attr('disabled', false);
+                    });
+            });
+        })();
+    {% endjs %}
+{% endif %}

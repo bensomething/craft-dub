@@ -19,6 +19,7 @@ use yii\base\Component;
  * @phpstan-type Rewrites list<array{0: string, 1: string}>
  * @phpstan-type TestStep array{step: string, ok: bool, detail: string}
  * @phpstan-type CheckSummary array{checked: int, ok: int, missing: int, drifted: int, stale: int, unreadable: int, repaired: int, unrepaired: int, error: string|null}
+ * @phpstan-type CheckResult array{label: string, detail: string, record: DubLink}
  * @phpstan-type AdoptSummary array{adopted: int, skipped: int, ambiguous: int, unmatched: list<string>, failed: int, error: string|null}
  */
 class DubService extends Component
@@ -38,6 +39,9 @@ class DubService extends Component
 
     /** @var array<int,list<int>> Site ids captured before a hard delete cascades the rows away. */
     private array $doomedSiteIds = [];
+
+    /** @var array<int,array<int,string>> Short links keyed by entry id, memoized per site. */
+    private array $shortLinksBySite = [];
 
     /**
      * A stable key for the pending-state maps. Uses the entry uid (assigned before
@@ -350,6 +354,33 @@ class DubService extends Component
             return null;
         }
         return $this->findRecord($entryId, $siteId)?->shortLink;
+    }
+
+    /**
+     * Every short link recorded for a site, keyed by entry id.
+     *
+     * For the entries index, which asks once per row. A findRecord() per row would be a query
+     * per row, and the index shows up to a hundred at a time. The whole set for one site is a
+     * single two-column read instead, memoized for the rest of the request, and there is at
+     * most one row per entry per site so it stays the size of the linked content rather than
+     * the size of the install.
+     *
+     * @return array<int,string>
+     */
+    public function getShortLinksForSite(int $siteId): array
+    {
+        if (!isset($this->shortLinksBySite[$siteId])) {
+            $rows = DubLink::find()
+                ->select(['entryId', 'shortLink'])
+                ->where(['siteId' => $siteId])
+                ->andWhere(['not', ['shortLink' => null]])
+                ->asArray()
+                ->all();
+
+            $this->shortLinksBySite[$siteId] = array_column($rows, 'shortLink', 'entryId');
+        }
+
+        return $this->shortLinksBySite[$siteId];
     }
 
     public function getWorkspaceId(): ?string
@@ -740,7 +771,12 @@ class DubService extends Component
      * resolves. `dub/adopt` can't help — it walks the links Dub still has and skips entries
      * that already have a row, so a row pointing at a deleted link is invisible to it.
      *
-     * @param callable(string, string): void|null $onResult
+     * The callback is handed the label and the detail separately, rather than one composed
+     * line, because the two surfaces that read it want different things: the console prints
+     * `label — detail`, while the utility screen builds a row from the record and shows only
+     * the detail beside it. Composing here would leave the CP unpicking a string.
+     *
+     * @param callable(string, CheckResult): void|null $onResult
      * @return CheckSummary
      */
     public function checkLinks(bool $fix = false, ?callable $onResult = null): array
@@ -787,21 +823,21 @@ class DubService extends Component
                 }
 
                 $summary['stale']++;
-                $onResult && $onResult('stale', $label . ' — ' . $stale);
+                $onResult && $onResult('stale', ['label' => $label, 'detail' => $stale, 'record' => $record]);
                 continue;
             }
 
             if ($status === 'failed') {
                 $summary['unreadable']++;
-                $onResult && $onResult('failed', $label . ' — ' . $this->lastError);
+                $onResult && $onResult('failed', ['label' => $label, 'detail' => (string)$this->lastError, 'record' => $record]);
                 continue;
             }
 
             $summary[$status]++;
             $detail = $status === 'missing'
-                ? $label . ' — gone from Dub'
-                : $label . ' — Dub has ' . ($remote['shortLink'] ?? '?') . ' → ' . ($remote['url'] ?? '?');
-            $onResult && $onResult($status, $detail);
+                ? 'gone from Dub'
+                : 'Dub has ' . ($remote['shortLink'] ?? '?') . ' → ' . ($remote['url'] ?? '?');
+            $onResult && $onResult($status, ['label' => $label, 'detail' => $detail, 'record' => $record]);
 
             if (!$fix) {
                 continue;
@@ -811,10 +847,10 @@ class DubService extends Component
                 $summary['repaired']++;
                 // Re-labelled, not reused: a reconciled link may have taken on Dub's slug, and
                 // reporting the old one would hide the very thing that changed.
-                $onResult && $onResult('repaired', $this->labelFor($record));
+                $onResult && $onResult('repaired', ['label' => $this->labelFor($record), 'detail' => '', 'record' => $record]);
             } else {
                 $summary['unrepaired']++;
-                $onResult && $onResult('failed', $label . ' — ' . ($this->lastError ?? 'could not repair'));
+                $onResult && $onResult('failed', ['label' => $label, 'detail' => $this->lastError ?? 'could not repair', 'record' => $record]);
             }
         }
 

@@ -1,0 +1,91 @@
+{# @var rows array #}
+{# @var summary array #}
+{# @var fix bool #}
+{# @var showSite bool #}
+{# @var canRepair bool #}
+
+{% if summary.error %}
+    <p class="error">{{ summary.error }}</p>
+{% else %}
+    {% if summary.checked == 0 %}
+        <p>{{ 'No short links have been recorded yet.' | t('dub') }}</p>
+    {% elseif rows is empty %}
+        <p>{{ '{checked} links checked. Nothing to report.' | t('dub', { checked: summary.checked }) }}</p>
+    {% else %}
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Status' | t('dub') }}</th>
+                    <th scope="col">{{ 'Entry' | t('dub') }}</th>
+                    {% if showSite %}<th scope="col">{{ 'Site' | t('dub') }}</th>{% endif %}
+                    <th scope="col">{{ 'Short link' | t('dub') }}</th>
+                    <th scope="col">{{ 'Detail' | t('dub') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>
+                            {# Found and, when a repair ran, done: two pills in one cell rather
+                               than two rows naming the same link. #}
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                {{ row.statusHtml | raw }}
+                                {{ row.outcomeHtml | raw }}
+                            </div>
+                        </td>
+                        <td>
+                            {%- if row.url -%}
+                                <a href="{{ row.url }}">{{ row.title }}</a>
+                            {%- else -%}
+                                {{ row.title }}
+                            {%- endif -%}
+                        </td>
+                        {% if showSite %}<td>{{ row.site }}</td>{% endif %}
+                        <td>
+                            {%- if row.shortLink -%}
+                                <a href="{{ row.shortLink }}" target="_blank" rel="noopener">{{ row.shortLink | replace('https://', '') }}</a>
+                            {%- endif -%}
+                        </td>
+                        <td>
+                            {{ row.detailHtml | raw }}
+                            {# Only a repair that didn't take has anything to add. #}
+                            {% if row.outcomeDetailHtml %}
+                                <div>{{ row.outcomeDetailHtml | raw }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {# Detections first, then what was done about them, so a row that drifted and could not
+           be repaired appears once on each side rather than twice in one count. #}
+        <p style="margin-top: 24px;">{{ '{checked} checked: {ok} ok, {missing} missing, {drifted} drifted, {stale} stale, {unreadable} unreadable.' | t('dub', {
+            checked: summary.checked,
+            ok: summary.ok,
+            missing: summary.missing,
+            drifted: summary.drifted,
+            stale: summary.stale,
+            unreadable: summary.unreadable,
+        }) }}</p>
+
+        {% if fix %}
+            <p>{{ '{repaired} repaired, {unrepaired} could not be repaired.' | t('dub', {
+                repaired: summary.repaired,
+                unrepaired: summary.unrepaired,
+            }) }}</p>
+        {% elseif canRepair and (summary.missing or summary.drifted) %}
+            {# The button's name is passed in rather than bolded around a split string, so a
+               translator still gets a whole sentence to work with. #}
+            <p>{{ 'Use {button} to recreate the missing links and reconcile the drifted ones.' | t('dub', {
+                button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
+            }) | raw }}</p>
+        {% endif %}
+
+        {% if summary.stale %}
+            {# Not repaired here on purpose: a link only moves when its entry is saved, and
+               reimplementing that move would be a second place deciding what a link looks like. #}
+            <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run php craft resave/entries.' | t('dub') }}</p>
+        {% endif %}
+    {% endif %}
+{% endif %}

@@ -82,6 +82,15 @@ Once configured, a **Short Link** panel will appear in the sidebar of any entry 
 - **QR code:** depending on the **Sidebar → QR code** setting, a QR code for the short link is shown in the sidebar as a small icon or a full image.
 - **Click count:** enable **Sidebar → Show click count** to display a read-only click total for the short link in the sidebar.
 
+### The entries index
+
+The entries index can show a **Short Link** column. Open **Customize sources** from the gear at
+the bottom of the index sidebar, choose a source, and add **Short Link** to its **Table Columns**.
+
+It is off by default, since the index belongs to whoever set it up. Each row shows the short link
+for the site being viewed, and nothing for an entry that has none. The column only appears for
+users with the **View the Short Link panel** permission.
+
 ## Adopting existing links
 
 If your Dub workspace already contains short links for your entries, created manually or before installing the plugin, you can hand them over to the plugin in one pass:
@@ -154,6 +163,15 @@ has actually changed and nothing for the rest.
 This is the counterpart to `dub/adopt`. Adoption brings links that exist at Dub under Craft's
 management, while `dub/check` looks the other way, at links Craft thinks it has.
 
+### From the control panel
+
+The same check has a screen at **Utilities → Dub Links**, for the people who look after the links
+but have no terminal. It reports the same three findings, with each one named after its entry and
+linked to it, and **Repair links** does what `--fix` does.
+
+Every recorded link is one request to Dub, made in series, so a large workspace is still better
+checked from the command line.
+
 ## Permissions
 
 Two permissions appear under **Settings → Users → Permissions**, in a **Dub Links** group:
@@ -164,6 +182,10 @@ Two permissions appear under **Settings → Users → Permissions**, in a **Dub 
 Without the second, the slug is shown but not editable, and a posted slug is ignored rather
 than applied. Links still follow their entries either way, so an editor without it saves
 normally and only loses the ability to rename or remove.
+
+The **Short Link** column on the entries index follows the first permission. The **Dub Links**
+utility has its own checkbox under **Utilities** on the same screen, and its **Repair links**
+button additionally needs **Edit the short link slug**, so it is hidden without it.
 
 ## Templating
 
