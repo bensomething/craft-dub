@@ -1,0 +1,36 @@
+{# @var summary array #}
+{# @var fix bool #}
+
+{# One line, sat in the button row where the progress bar was: the run's outcome reads as the
+   state of the buttons that started it. Inline rather than paragraphs, since it shares a flex
+   row with them. #}
+
+{# Derived rather than passed: the rows are spread across every slice of the run, so by the
+   time this renders there is no list left to ask how long it was. Only these four statuses
+   open a row, and a repair folds into the row that found it. #}
+{% set findings = summary.missing + summary.drifted + summary.stale + summary.unreadable %}
+
+{%- if summary.error -%}
+    <span class="error">{{ summary.error }}</span>
+{%- elseif summary.checked == 0 -%}
+    {{ 'No short links have been recorded yet.' | t('dub') }}
+{%- elseif findings == 0 -%}
+    {{ '{checked} links checked. Nothing to report.' | t('dub', { checked: summary.checked }) }}
+{%- else -%}
+    {# Detections first, then what was done about them, so a row that drifted and could not be
+       repaired appears once on each side rather than twice in one count. #}
+    {{ '{checked} checked: {ok} ok, {missing} missing, {drifted} drifted, {stale} stale, {unreadable} unreadable.' | t('dub', {
+        checked: summary.checked,
+        ok: summary.ok,
+        missing: summary.missing,
+        drifted: summary.drifted,
+        stale: summary.stale,
+        unreadable: summary.unreadable,
+    }) }}
+    {% if fix %}
+        {{ '{repaired} repaired, {unrepaired} could not be repaired.' | t('dub', {
+            repaired: summary.repaired,
+            unrepaired: summary.unrepaired,
+        }) }}
+    {% endif %}
+{%- endif -%}

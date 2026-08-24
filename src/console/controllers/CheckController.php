@@ -3,6 +3,7 @@
 namespace bensomething\craftdub\console\controllers;
 
 use bensomething\craftdub\Plugin;
+use bensomething\craftdub\services\DubService;
 use craft\console\Controller;
 use craft\helpers\Console;
 use yii\console\ExitCode;
@@ -17,6 +18,8 @@ use yii\console\ExitCode;
  *
  * `dub/adopt` can't do it: adoption walks the links Dub still has and skips entries that
  * already have a row, so a row pointing at a deleted link is invisible to it.
+ *
+ * @phpstan-import-type CheckResult from DubService
  */
 class CheckController extends Controller
 {
@@ -51,7 +54,10 @@ class CheckController extends Controller
             }
         }
 
-        $summary = Plugin::getInstance()->dub->checkLinks($this->fix, function(string $status, string $message): void {
+        $summary = Plugin::getInstance()->dub->checkLinks($this->fix, function(string $status, array $result): void {
+            /** @var CheckResult $result */
+            $message = self::line($result);
+
             switch ($status) {
                 case 'missing':
                     $this->stdout('✗ missing    ', Console::FG_RED);
@@ -118,5 +124,21 @@ class CheckController extends Controller
             : $summary['missing'] + $summary['drifted']);
 
         return $unresolved > 0 ? ExitCode::UNSPECIFIED_ERROR : ExitCode::OK;
+    }
+
+    /**
+     * One finding as a line of output.
+     *
+     * The service reports the label and the detail apart, so the utility screen can put each
+     * in its own column. Here they go back together, and a finding with nothing to add — a
+     * repair that worked — is just its label.
+     *
+     * @param CheckResult $result
+     */
+    private static function line(array $result): string
+    {
+        return $result['detail'] !== ''
+            ? $result['label'] . ' — ' . $result['detail']
+            : $result['label'];
     }
 }

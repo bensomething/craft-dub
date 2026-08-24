@@ -1,0 +1,272 @@
+{# @var hasApiKey bool #}
+{# @var settingsUrl string #}
+{# @var canRepair bool #}
+{# @var showSite bool #}
+{# @var linkCount int #}
+
+{% if not hasApiKey %}
+    {# The field's name is passed in rather than bolded around a split string, so a translator
+       still gets a whole sentence to work with. #}
+    <p>{{ 'Add your Dub {label} before checking links.' | t('dub', {
+            label: '<strong>' ~ ('API Key' | t('dub')) ~ '</strong>',
+        }) | raw }}
+        <a href="{{ settingsUrl }}">{{ "Go to the plugin's settings." | t('dub') }}</a></p>
+{% else %}
+    <p><strong>{{ 'Check links' | t('dub') }}</strong>
+        {{ 'runs every short link recorded here against Dub, and reports:' | t('dub') }}</p>
+
+    <ul class="bullets">
+        <li>{{ 'links that are missing' | t('dub') }}</li>
+        <li>{{ 'links that have been edited at Dub' | t('dub') }}</li>
+        <li>{{ 'links that no longer point where their entry lives' | t('dub') }}</li>
+    </ul>
+
+    {% if canRepair %}
+        <p><strong>{{ 'Repair links' | t('dub') }}</strong>
+            {{ 'recreates the missing links and reconciles the edited ones.' | t('dub') }}</p>
+
+        {# The label stays outside the translated string, so a translator gets a sentence to
+           work with rather than a sentence with markup wrapped around part of it. #}
+        <ul class="bullets">
+            <li><strong>{{ 'Destination URL' | t('dub') }}:</strong>
+                {{ 'Craft owns this, so its value is pushed back to Dub.' | t('dub') }}</li>
+            <li><strong>{{ 'Short link slug' | t('dub') }}:</strong>
+                {{ 'Dub owns this, so a rename made there is adopted here rather than reversed.' | t('dub') }}</li>
+        </ul>
+    {% endif %}
+
+    {# Full bleed on its own. The utility's content is rendered straight into the content
+       pane, so this is a real `.content-pane > hr` and Craft's own negative inline margin
+       applies. The settings screen has to restate that rule because its hrs sit a level
+       deeper, inside a tab panel. #}
+    <hr>
+
+    {# Craft's own `.buttons` margin is the gap before the results, and dead space at the foot
+       of the pane when there are none. So it is kept, and dropped only while there is nothing
+       under it, by a class the script puts on and takes off.
+
+       Both CSS-only versions of this failed, and for the same underlying reason: each asked a
+       selector to react to content injected by script. `:has(+ #dub-check-results:empty)` left
+       the collapsed margin applied after the container filled, and moving the gap onto
+       `#dub-check-results > :first-child` never landed on the injected first child at all. A
+       class on the element whose margin is in question has nothing to get wrong. #}
+
+    {# Widest the count can get: both numbers at their full digit count, plus the ' / '
+       between them. #}
+    {% set countWidth = ((linkCount ~ '') | length * 2) + 3 %}
+
+    <style>
+        .dub-buttons.dub-no-results { margin-block-end: 0 }
+
+        /* The progress bar and the result share one slot at the end of the button row, one of
+           them showing at a time, so the run's state reads as the state of the buttons that
+           started it.
+
+           The buttons are grouped so the row is two items rather than three, which lets the
+           row's own gap be the space between the buttons and the slot, `var(--padding)` to
+           match what the pane sets them off from its edge by, while the buttons keep Craft's
+           7px between themselves. Grouping is also what makes the wrap work: when less than
+           20rem is left for the slot it drops to its own line, full width and flush with the
+           text below, rather than being squeezed into a column too narrow to read. Space, not
+           viewport: a media query would answer the window when the question is the pane. */
+        .dub-buttons { flex-wrap: wrap; gap: var(--padding) }
+        .dub-btn-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px }
+        .dub-row-end { flex: 1 1 20rem }
+
+        /* Craft's progress bar is absolutely positioned across the middle 60% of whatever it
+           is measured against, which is right for a bar that overlays a pane and wrong for one
+           sitting in a row of buttons. Laid out in the flow instead, filling what the buttons
+           leave. The count is ordered ahead of the bar so it stays beside them rather than
+           being pushed to the far edge by a bar that grows, its width reserved up front so the
+           bar starts in the same place at 0 of 9 as at 9 of 9, and its figures tabular so it
+           doesn't twitch between digits of unequal width either. */
+        #dub-check-progress { display: flex; align-items: center; gap: 10px }
+        #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
+        /* No count until there is one to show. Reserving its width through the indeterminate
+           phase left a gap the bar could not use, so the slot is taken out of the flow until
+           the first slice reports and the script marks the row as counting. Craft's own
+           `.hidden` still wins over this, so hiding the whole bar hides the count with it. */
+        #dub-check-progress .progressbar-status { display: none }
+        #dub-check-progress.dub-counting .progressbar-status { display: block; order: -1;
+            white-space: nowrap; font-variant-numeric: tabular-nums;
+            min-width: {{ countWidth }}ch }
+
+        /* Five columns do not fit a narrow pane, and letting them crush turns the Detail
+           column into one word per line while the Short link column breaks mid-slug. The table
+           keeps a width it can be read at and scrolls inside its own box instead, so the pane
+           itself never scrolls sideways. */
+        #dub-check-scroller { overflow-x: auto }
+        #dub-check-table { min-width: 40rem }
+
+        /* The remedies sit between the buttons and the table they refer to, one pane padding
+           clear of each. The outer paragraph margins are zeroed and the space below is padding
+           rather than margin, because padding cannot collapse: the block's own bottom margin
+           would have collapsed against the table and closed the gap. Above it, the button
+           row's margin already does the job. The block is hidden outright when there is
+           nothing to say, so an empty one takes no room. */
+        #dub-check-fix { padding-block-end: var(--pane-padding) }
+        #dub-check-fix p:first-child { margin-block-start: 0 }
+        #dub-check-fix p:last-child { margin-block-end: 0 }
+    </style>
+
+    <div class="buttons dub-buttons dub-no-results">
+        {# Two buttons rather than a switch beside one: repairing writes to Dub, and an action
+           that reaches a third party should say so on the control that starts it. #}
+        <div class="dub-btn-group">
+            <button type="button" class="btn submit dub-check-btn" data-fix="0">{{ 'Check links' | t('dub') }}</button>
+            {% if canRepair %}
+                <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
+            {% endif %}
+        </div>
+
+        {# Craft.ProgressBar fills this while the run is on. When it finishes, the result
+           takes the same slot. #}
+        <div id="dub-check-progress" class="dub-row-end hidden"></div>
+        <div id="dub-check-result" class="dub-row-end hidden"></div>
+    </div>
+
+    <div id="dub-check-results">
+        {# What to do about the findings, above the findings themselves. #}
+        <div id="dub-check-fix" class="hidden"></div>
+
+        {# Opened empty and filled a slice at a time, so findings from the slices that did land
+           stay on screen if a later one fails. The scroller stays put and stays empty until the
+           table inside it is shown, so it costs nothing while there is nothing to scroll. #}
+        <div id="dub-check-scroller">
+            <table id="dub-check-table" class="data fullwidth hidden">
+                <thead>
+                    <tr>
+                        <th scope="col">{{ 'Status' | t('dub') }}</th>
+                        <th scope="col">{{ 'Entry' | t('dub') }}</th>
+                        {% if showSite %}<th scope="col">{{ 'Site' | t('dub') }}</th>{% endif %}
+                        <th scope="col">{{ 'Short link' | t('dub') }}</th>
+                        <th scope="col">{{ 'Detail' | t('dub') }}</th>
+                    </tr>
+                </thead>
+                <tbody id="dub-check-rows"></tbody>
+            </table>
+        </div>
+    </div>
+
+    {% js %}
+        (function() {
+            var $buttons = $('.dub-check-btn');
+            var $buttonRow = $('.dub-buttons');
+            var $progress = $('#dub-check-progress');
+            var $result = $('#dub-check-result');
+            var $fix = $('#dub-check-fix');
+            var $table = $('#dub-check-table');
+            var $rows = $('#dub-check-rows');
+
+            var confirmRepair = {{ 'Recreate deleted links and re-point edited ones to match Craft?' | t('dub') | json_encode | raw }};
+            var failed = {{ 'The check could not be run.' | t('dub') | json_encode | raw }};
+            var linkCount = {{ linkCount }};
+
+            {# Second argument is displaySteps, which is what prints "6 / 10" beneath the bar. #}
+            var progressBar = new Craft.ProgressBar($progress, true);
+
+            {# hideProgressBar() also stops the interval that announces progress to screen
+               readers, so the bar is never just hidden. #}
+            function stopProgress() {
+                progressBar.hideProgressBar();
+                $progress.addClass('hidden').removeClass('dub-counting');
+            }
+
+            {# The buttons keep their bottom margin only while something sits under them.
+               Neither the bar nor the result counts: both sit in the button row itself. #}
+            function syncSpacing() {
+                var hasContent = $rows.children().length > 0 || !$fix.hasClass('hidden');
+
+                $buttonRow.toggleClass('dub-no-results', !hasContent);
+            }
+
+            {# Empty is the normal case for the remedies, so the block is hidden rather than
+               left standing with nothing in it. #}
+            function fill($el, html) {
+                $el.html(html || '');
+                $el.toggleClass('hidden', $.trim(html || '').length === 0);
+            }
+
+            function runSlice(fix, offset, totals) {
+                var data = { fix: fix ? 1 : 0, offset: offset };
+                if (totals) {
+                    data.totals = totals;
+                }
+
+                return Craft.sendActionRequest('POST', 'dub/check/run', { data: data })
+                    .then(function(response) {
+                        var result = response.data;
+
+                        $rows.append(result.rowsHtml);
+                        if ($rows.children().length) {
+                            $table.removeClass('hidden');
+                        }
+
+                        {# Re-read from the response rather than trusted from the start: a save
+                           during a long run can add a link, and a denominator that never moves
+                           would quietly finish at 41 of 40. #}
+                        {# From here there is a real position to report, so the count takes its
+                           place at the head of the row. #}
+                        $progress.addClass('dub-counting');
+                        progressBar.setItemCount(result.total);
+                        progressBar.setProcessedItemCount(result.checked);
+                        progressBar.updateProgressBar();
+                        syncSpacing();
+
+                        if (result.done) {
+                            stopProgress();
+                            fill($result, result.resultHtml);
+                            fill($fix, result.fixHtml);
+                            syncSpacing();
+                            return;
+                        }
+
+                        return runSlice(fix, result.nextOffset, result.totals);
+                    });
+            }
+
+            $buttons.on('click', function(ev) {
+                ev.preventDefault();
+
+                var fix = $(this).data('fix') === 1;
+                if (fix && !confirm(confirmRepair)) {
+                    return;
+                }
+
+                $buttons.addClass('disabled').attr('disabled', true);
+                $rows.empty();
+                fill($result, '');
+                fill($fix, '');
+                $table.addClass('hidden');
+
+                {# resetProgressBar() leaves the bar full width, striped and uncounted, which
+                   is the honest state while the first slice is out: something is happening and
+                   there is no position to report yet. updateProgressBar() is deliberately not
+                   called here. It would compute zero of nine, collapsing the bar to an empty
+                   track under a count that reads as a result rather than a start, which is a
+                   poor look on a normal run and a worse one on a run that is about to fail at
+                   the API key. The count appears when there is a real one, on the first slice
+                   to come back. The total goes on now, though, so that slice has a denominator
+                   ready. #}
+                progressBar.resetProgressBar();
+                progressBar.setItemCount(linkCount);
+                progressBar.showProgressBar();
+                $progress.removeClass('dub-counting');
+                $progress.removeClass('hidden');
+                syncSpacing();
+
+                runSlice(fix, 0, null)
+                    .catch(function(e) {
+                        {# Whatever landed before the failure stays on screen. That is the whole
+                           point of slicing: a run that stops halfway says where it got to. #}
+                        Craft.cp.displayError((e && e.response && e.response.data && e.response.data.message) || failed);
+                        stopProgress();
+                        syncSpacing();
+                    })
+                    .then(function() {
+                        $buttons.removeClass('disabled').attr('disabled', false);
+                    });
+            });
+        })();
+    {% endjs %}
+{% endif %}

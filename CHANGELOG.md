@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 - 2026-08-24
+
+### Added
+- A **Short Link** column for entry indexes.
+- A **Dub Links** utility, which runs the `dub/check` report in the control panel and can repair what it finds.
+
+### Fixed
+- `dub/check` no longer reports every link as missing when the Dub API key is wrong, expired or revoked. It now says the key was refused.
+
 ## 1.5.0 - 2026-08-23
 
 ### Added
