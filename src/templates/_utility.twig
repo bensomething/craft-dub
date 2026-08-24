@@ -230,13 +230,17 @@
                 fill($fix, '');
                 $table.addClass('hidden');
 
-                {# resetProgressBar() puts the count back to 1 of 0, so the real total goes on
-                   after it, not before. Zero processed keeps the bar striped rather than empty,
-                   which is the right look for work that has started and reported nothing yet. #}
+                {# resetProgressBar() leaves the bar full width, striped and uncounted, which
+                   is the honest state while the first slice is out: something is happening and
+                   there is no position to report yet. updateProgressBar() is deliberately not
+                   called here. It would compute zero of nine, collapsing the bar to an empty
+                   track under a count that reads as a result rather than a start, which is a
+                   poor look on a normal run and a worse one on a run that is about to fail at
+                   the API key. The count appears when there is a real one, on the first slice
+                   to come back. The total goes on now, though, so that slice has a denominator
+                   ready. #}
                 progressBar.resetProgressBar();
                 progressBar.setItemCount(linkCount);
-                progressBar.setProcessedItemCount(0);
-                progressBar.updateProgressBar();
                 progressBar.showProgressBar();
                 $progress.removeClass('hidden');
                 syncSpacing();
