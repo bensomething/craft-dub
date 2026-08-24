@@ -85,7 +85,11 @@
         {% if summary.stale %}
             {# Not repaired here on purpose: a link only moves when its entry is saved, and
                reimplementing that move would be a second place deciding what a link looks like. #}
-            <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run php craft resave/entries.' | t('dub') }}</p>
+            {# The command is passed in rather than left in the string: it is a literal, not
+               something to translate, and the full stop stays outside the code element. #}
+            <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run {command}.' | t('dub', {
+                command: '<code>php craft resave/entries</code>',
+            }) | raw }}</p>
         {% endif %}
     {% endif %}
 {% endif %}
