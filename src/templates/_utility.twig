@@ -70,6 +70,10 @@
         #dub-check-progress { display: flex; align-items: center; flex: 1; gap: 10px;
             margin-inline-start: calc(var(--padding) - 7px) }
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
+
+        /* The summary's divider sits two levels inside the pane, so Craft's own
+           `.content-pane > hr` rule doesn't reach it and the full bleed is restated here. */
+        #dub-check-summary hr { margin-inline: calc(var(--padding) * -1) }
         /* Tabular figures as well as the reserved width: without them the count still
            twitches between digits of unequal width at the same digit count. */
         #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;

@@ -3,16 +3,33 @@
 {# @var canRepair bool #}
 
 {# Rendered once, when the last slice lands, from the totals carried across the whole run. #}
+
+{# Derived rather than passed: the rows are spread across every slice of the run, so by the
+   time this renders there is no list left to ask how long it was. Only these four statuses
+   open a row, and a repair folds into the row that found it. #}
+{% set findings = summary.missing + summary.drifted + summary.stale + summary.unreadable %}
+
+{# What can actually be done about what was found. Both halves are conditional, and there are
+   real runs where neither holds: findings that are only unreadable have no remedy to offer, a
+   user without the repair permission is not going to be told to press a button they cannot
+   see, and a repair that fixed everything leaves nothing to say. So the heading hangs off this
+   rather than off there being findings at all. #}
+{% set offerRepair = not fix and canRepair and (summary.missing or summary.drifted) %}
+{% set showFix = offerRepair or summary.stale %}
+
 {% if summary.error %}
     <p class="error">{{ summary.error }}</p>
 {% elseif summary.checked == 0 %}
     <p>{{ 'No short links have been recorded yet.' | t('dub') }}</p>
-{% elseif summary.missing + summary.drifted + summary.stale + summary.unreadable == 0 %}
-    {# Derived rather than passed: the rows are spread across every slice of the run, so by the
-       time this renders there is no list left to ask how long it was. Only these four statuses
-       open a row, and a repair folds into the row that found it. #}
+{% elseif findings == 0 %}
+    {# One line, no table above it and nothing to fix below it. A heading over a lone sentence
+       labels a section that isn't there. #}
     <p>{{ '{checked} links checked. Nothing to report.' | t('dub', { checked: summary.checked }) }}</p>
 {% else %}
+    <hr>
+
+    <h2>{{ 'Result' | t('dub') }}</h2>
+
     {# Detections first, then what was done about them, so a row that drifted and could not be
        repaired appears once on each side rather than twice in one count. #}
     <p>{{ '{checked} checked: {ok} ok, {missing} missing, {drifted} drifted, {stale} stale, {unreadable} unreadable.' | t('dub', {
@@ -29,21 +46,27 @@
             repaired: summary.repaired,
             unrepaired: summary.unrepaired,
         }) }}</p>
-    {% elseif canRepair and (summary.missing or summary.drifted) %}
-        {# The button's name is passed in rather than bolded around a split string, so a
-           translator still gets a whole sentence to work with. #}
-        <p>{{ 'Use {button} to recreate the missing links and reconcile the drifted ones.' | t('dub', {
-            button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
-        }) | raw }}</p>
     {% endif %}
 
-    {% if summary.stale %}
-        {# Not repaired here on purpose: a link only moves when its entry is saved, and
-           reimplementing that move would be a second place deciding what a link looks like. #}
-        {# The command is passed in rather than left in the string: it is a literal, not
-           something to translate, and the full stop stays outside the code element. #}
-        <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run {command}.' | t('dub', {
-            command: '<code>php craft resave/entries</code>',
-        }) | raw }}</p>
+    {% if showFix %}
+        <h2>{{ 'How to fix' | t('dub') }}</h2>
+
+        {% if offerRepair %}
+            {# The button's name is passed in rather than bolded around a split string, so a
+               translator still gets a whole sentence to work with. #}
+            <p>{{ 'Use {button} to recreate the missing links and reconcile the drifted ones.' | t('dub', {
+                button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
+            }) | raw }}</p>
+        {% endif %}
+
+        {% if summary.stale %}
+            {# Not repaired here on purpose: a link only moves when its entry is saved, and
+               reimplementing that move would be a second place deciding what a link looks like. #}
+            {# The command is passed in rather than left in the string: it is a literal, not
+               something to translate, and the full stop stays outside the code element. #}
+            <p>{{ 'Stale links move when their entries are next saved. Save the entries listed above, or run {command}.' | t('dub', {
+                command: '<code>php craft resave/entries</code>',
+            }) | raw }}</p>
+        {% endif %}
     {% endif %}
 {% endif %}
