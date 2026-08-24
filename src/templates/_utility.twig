@@ -72,17 +72,15 @@
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
 
         /* The summary's divider sits two levels inside the pane, so Craft's own
-           `.content-pane > hr` rule doesn't reach it and the bleed is restated here.
+           `.content-pane > hr` rule doesn't reach it. Only the bleed is restated: its block
+           margin is Craft's `--hr-margin`, the same one every other rule in the control panel
+           gets, and left alone it is right. Overriding it was what went wrong twice.
 
-           The gap above it is the table's, not the divider's. Setting it on the divider did
-           not take, and rather than keep guessing at which of Craft's several `hr` margin
-           rules was winning, it now hangs off the one element on this screen that is always
-           present, never injected, and mine. Its own block margin is zeroed so nothing
-           unaccounted for is left in play, and the space under the divider is the heading's,
-           which was already right. */
+           The table's own bottom margin stays as a floor under that. Adjacent margins collapse
+           to the larger of the two, so it cannot add to the gap, only stop it closing if that
+           token ever shrinks. */
         #dub-check-table { margin-block-end: var(--pane-padding) }
-        #dub-check-summary hr { margin-block: 0;
-            margin-inline: calc(var(--pane-padding) * -1) }
+        #dub-check-summary hr { margin-inline: calc(var(--pane-padding) * -1) }
         /* Tabular figures as well as the reserved width: without them the count still
            twitches between digits of unequal width at the same digit count. */
         #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;
