@@ -1,6 +1,8 @@
 {# @var hasApiKey bool #}
 {# @var settingsUrl string #}
 {# @var canRepair bool #}
+{# @var showSite bool #}
+{# @var linkCount int #}
 
 {% if not hasApiKey %}
     {# The field's name is passed in rather than bolded around a split string, so a translator
@@ -57,11 +59,12 @@
         {% if canRepair %}
             <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
         {% endif %}
-        <div id="dub-check-spinner" class="spinner hidden"></div>
     </div>
 
     <div id="dub-check-results">
-        <p id="dub-check-progress" class="hidden"></p>
+        {# Craft.ProgressBar fills this, and with steps on it prints the running count under
+           the bar, the way the Asset Indexes utility does. #}
+        <div id="dub-check-progress" class="hidden"></div>
 
         {# Opened empty and filled a slice at a time, so findings from the slices that did land
            stay on screen if a later one fails. #}
@@ -85,7 +88,6 @@
         (function() {
             var $buttons = $('.dub-check-btn');
             var $buttonRow = $('.dub-buttons');
-            var $spinner = $('#dub-check-spinner');
             var $progress = $('#dub-check-progress');
             var $table = $('#dub-check-table');
             var $rows = $('#dub-check-rows');
@@ -93,10 +95,17 @@
 
             var confirmRepair = {{ 'Recreate deleted links and re-point edited ones to match Craft?' | t('dub') | json_encode | raw }};
             var failed = {{ 'The check could not be run.' | t('dub') | json_encode | raw }};
-            {# Substituted here rather than server side: the numbers change on every slice, and
-               a round trip per number to have Craft do the replacing would be absurd. Craft::t()
-               leaves the placeholders alone when it is given no parameters. #}
-            var progressText = {{ 'Checked {checked} of {total}.' | t('dub') | json_encode | raw }};
+            var linkCount = {{ linkCount }};
+
+            {# Second argument is displaySteps, which is what prints "6 / 10" beneath the bar. #}
+            var progressBar = new Craft.ProgressBar($progress, true);
+
+            {# hideProgressBar() also stops the interval that announces progress to screen
+               readers, so the bar is never just hidden. #}
+            function stopProgress() {
+                progressBar.hideProgressBar();
+                $progress.addClass('hidden');
+            }
 
             {# The buttons keep their bottom margin only while something sits under them. #}
             function syncSpacing() {
@@ -122,14 +131,17 @@
                             $table.removeClass('hidden');
                         }
 
-                        $progress.text(progressText
-                            .replace('{checked}', result.checked)
-                            .replace('{total}', result.total));
+                        {# Re-read from the response rather than trusted from the start: a save
+                           during a long run can add a link, and a denominator that never moves
+                           would quietly finish at 41 of 40. #}
+                        progressBar.setItemCount(result.total);
+                        progressBar.setProcessedItemCount(result.checked);
+                        progressBar.updateProgressBar();
                         syncSpacing();
 
                         if (result.done) {
                             $summary.html(result.summaryHtml);
-                            $progress.addClass('hidden');
+                            stopProgress();
                             syncSpacing();
                             return;
                         }
@@ -147,11 +159,19 @@
                 }
 
                 $buttons.addClass('disabled').attr('disabled', true);
-                $spinner.removeClass('hidden');
                 $rows.empty();
                 $summary.empty();
                 $table.addClass('hidden');
-                $progress.removeClass('hidden').text('');
+
+                {# resetProgressBar() puts the count back to 1 of 0, so the real total goes on
+                   after it, not before. Zero processed keeps the bar striped rather than empty,
+                   which is the right look for work that has started and reported nothing yet. #}
+                progressBar.resetProgressBar();
+                progressBar.setItemCount(linkCount);
+                progressBar.setProcessedItemCount(0);
+                progressBar.updateProgressBar();
+                progressBar.showProgressBar();
+                $progress.removeClass('hidden');
                 syncSpacing();
 
                 runSlice(fix, 0, null)
@@ -159,11 +179,10 @@
                         {# Whatever landed before the failure stays on screen. That is the whole
                            point of slicing: a run that stops halfway says where it got to. #}
                         Craft.cp.displayError((e && e.response && e.response.data && e.response.data.message) || failed);
-                        $progress.addClass('hidden');
+                        stopProgress();
                         syncSpacing();
                     })
                     .then(function() {
-                        $spinner.addClass('hidden');
                         $buttons.removeClass('disabled').attr('disabled', false);
                     });
             });

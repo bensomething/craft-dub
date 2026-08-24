@@ -81,6 +81,9 @@ class CheckLinks extends Utility
             // The table is rendered empty up front and filled a slice at a time, so its heading
             // row has to know about the site column before the first slice lands.
             'showSite' => Craft::$app->getIsMultiSite(),
+            // The progress bar's denominator, known before the first slice comes back so the
+            // bar starts against the real total rather than counting up to a moving target.
+            'linkCount' => Plugin::getInstance()->dub->countLinks(),
         ]);
     }
 }
