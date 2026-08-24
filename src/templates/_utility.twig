@@ -82,8 +82,14 @@
            doesn't twitch between digits of unequal width either. */
         #dub-check-progress { display: flex; align-items: center; gap: 10px }
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
-        #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;
-            font-variant-numeric: tabular-nums; min-width: {{ countWidth }}ch }
+        /* No count until there is one to show. Reserving its width through the indeterminate
+           phase left a gap the bar could not use, so the slot is taken out of the flow until
+           the first slice reports and the script marks the row as counting. Craft's own
+           `.hidden` still wins over this, so hiding the whole bar hides the count with it. */
+        #dub-check-progress .progressbar-status { display: none }
+        #dub-check-progress.dub-counting .progressbar-status { display: block; order: -1;
+            white-space: nowrap; font-variant-numeric: tabular-nums;
+            min-width: {{ countWidth }}ch }
 
         /* Five columns do not fit a narrow pane, and letting them crush turns the Detail
            column into one word per line while the Short link column breaks mid-slug. The table
@@ -163,7 +169,7 @@
                readers, so the bar is never just hidden. #}
             function stopProgress() {
                 progressBar.hideProgressBar();
-                $progress.addClass('hidden');
+                $progress.addClass('hidden').removeClass('dub-counting');
             }
 
             {# The buttons keep their bottom margin only while something sits under them.
@@ -199,6 +205,9 @@
                         {# Re-read from the response rather than trusted from the start: a save
                            during a long run can add a link, and a denominator that never moves
                            would quietly finish at 41 of 40. #}
+                        {# From here there is a real position to report, so the count takes its
+                           place at the head of the row. #}
+                        $progress.addClass('dub-counting');
                         progressBar.setItemCount(result.total);
                         progressBar.setProcessedItemCount(result.checked);
                         progressBar.updateProgressBar();
@@ -242,6 +251,7 @@
                 progressBar.resetProgressBar();
                 progressBar.setItemCount(linkCount);
                 progressBar.showProgressBar();
+                $progress.removeClass('dub-counting');
                 $progress.removeClass('hidden');
                 syncSpacing();
 

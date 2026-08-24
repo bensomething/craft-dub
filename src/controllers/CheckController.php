@@ -37,7 +37,7 @@ class CheckController extends Controller
      * workspace, is the one that gets cut off, and a repair cut off halfway is silent about
      * which half it finished.
      */
-    private const BATCH_SIZE = 25;
+    private const BATCH_SIZE = 2;
 
     // Public Methods
     // =========================================================================
