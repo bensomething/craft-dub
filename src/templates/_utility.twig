@@ -50,6 +50,11 @@
        the collapsed margin applied after the container filled, and moving the gap onto
        `#dub-check-results > :first-child` never landed on the injected first child at all. A
        class on the element whose margin is in question has nothing to get wrong. #}
+    {# Widest the count can get: both numbers at their full digit count, plus the ' / '
+       between them. Reserved up front so the bar starts in the same place at 0 of 9 as it
+       does at 9 of 9, rather than being nudged along as the numbers grow. #}
+    {% set countWidth = ((linkCount ~ '') | length * 2) + 3 %}
+
     <style>
         .dub-buttons.dub-no-results { margin-block-end: 0 }
 
@@ -58,9 +63,17 @@
            sitting in a row of buttons. Laid out in the flow instead, filling what the buttons
            leave. The count is ordered ahead of the bar so it stays beside them rather than
            being pushed to the far edge by a bar that grows. */
-        #dub-check-progress { display: flex; align-items: center; flex: 1; gap: 10px }
+        /* Set off from the buttons by the same space the pane sets them off from its own
+           edge. `var(--padding)` is what the pane itself uses, so it stays right if that
+           token changes or shifts at another breakpoint. `.buttons` already contributes its
+           own 7px gap, so only the remainder is added here. */
+        #dub-check-progress { display: flex; align-items: center; flex: 1; gap: 10px;
+            margin-inline-start: calc(var(--padding) - 7px) }
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
-        #dub-check-progress .progressbar-status { order: -1; white-space: nowrap }
+        /* Tabular figures as well as the reserved width: without them the count still
+           twitches between digits of unequal width at the same digit count. */
+        #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;
+            font-variant-numeric: tabular-nums; min-width: {{ countWidth }}ch }
     </style>
 
     <div class="buttons dub-buttons dub-no-results">
