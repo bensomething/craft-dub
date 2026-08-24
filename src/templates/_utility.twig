@@ -60,10 +60,18 @@
 
         /* The progress bar and the result share one slot at the end of the button row, one of
            them showing at a time, so the run's state reads as the state of the buttons that
-           started it. Set off from them by the same space the pane sets them off from its own
-           edge: `var(--padding)` is the pane's own value, and `.buttons` already contributes
-           its 7px gap, so only the remainder is added. */
-        .dub-row-end { flex: 1; margin-inline-start: calc(var(--padding) - 7px) }
+           started it.
+
+           The buttons are grouped so the row is two items rather than three, which lets the
+           row's own gap be the space between the buttons and the slot, `var(--padding)` to
+           match what the pane sets them off from its edge by, while the buttons keep Craft's
+           7px between themselves. Grouping is also what makes the wrap work: when less than
+           20rem is left for the slot it drops to its own line, full width and flush with the
+           text below, rather than being squeezed into a column too narrow to read. Space, not
+           viewport: a media query would answer the window when the question is the pane. */
+        .dub-buttons { flex-wrap: wrap; gap: var(--padding) }
+        .dub-btn-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px }
+        .dub-row-end { flex: 1 1 20rem }
 
         /* Craft's progress bar is absolutely positioned across the middle 60% of whatever it
            is measured against, which is right for a bar that overlays a pane and wrong for one
@@ -76,6 +84,13 @@
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
         #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;
             font-variant-numeric: tabular-nums; min-width: {{ countWidth }}ch }
+
+        /* Five columns do not fit a narrow pane, and letting them crush turns the Detail
+           column into one word per line while the Short link column breaks mid-slug. The table
+           keeps a width it can be read at and scrolls inside its own box instead, so the pane
+           itself never scrolls sideways. */
+        #dub-check-scroller { overflow-x: auto }
+        #dub-check-table { min-width: 40rem }
 
         /* The remedies sit between the buttons and the table they refer to, one pane padding
            clear of each. The outer paragraph margins are zeroed and the space below is padding
@@ -91,10 +106,12 @@
     <div class="buttons dub-buttons dub-no-results">
         {# Two buttons rather than a switch beside one: repairing writes to Dub, and an action
            that reaches a third party should say so on the control that starts it. #}
-        <button type="button" class="btn submit dub-check-btn" data-fix="0">{{ 'Check links' | t('dub') }}</button>
-        {% if canRepair %}
-            <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
-        {% endif %}
+        <div class="dub-btn-group">
+            <button type="button" class="btn submit dub-check-btn" data-fix="0">{{ 'Check links' | t('dub') }}</button>
+            {% if canRepair %}
+                <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
+            {% endif %}
+        </div>
 
         {# Craft.ProgressBar fills this while the run is on. When it finishes, the result
            takes the same slot. #}
@@ -107,19 +124,22 @@
         <div id="dub-check-fix" class="hidden"></div>
 
         {# Opened empty and filled a slice at a time, so findings from the slices that did land
-           stay on screen if a later one fails. #}
-        <table id="dub-check-table" class="data fullwidth hidden">
-            <thead>
-                <tr>
-                    <th scope="col">{{ 'Status' | t('dub') }}</th>
-                    <th scope="col">{{ 'Entry' | t('dub') }}</th>
-                    {% if showSite %}<th scope="col">{{ 'Site' | t('dub') }}</th>{% endif %}
-                    <th scope="col">{{ 'Short link' | t('dub') }}</th>
-                    <th scope="col">{{ 'Detail' | t('dub') }}</th>
-                </tr>
-            </thead>
-            <tbody id="dub-check-rows"></tbody>
-        </table>
+           stay on screen if a later one fails. The scroller stays put and stays empty until the
+           table inside it is shown, so it costs nothing while there is nothing to scroll. #}
+        <div id="dub-check-scroller">
+            <table id="dub-check-table" class="data fullwidth hidden">
+                <thead>
+                    <tr>
+                        <th scope="col">{{ 'Status' | t('dub') }}</th>
+                        <th scope="col">{{ 'Entry' | t('dub') }}</th>
+                        {% if showSite %}<th scope="col">{{ 'Site' | t('dub') }}</th>{% endif %}
+                        <th scope="col">{{ 'Short link' | t('dub') }}</th>
+                        <th scope="col">{{ 'Detail' | t('dub') }}</th>
+                    </tr>
+                </thead>
+                <tbody id="dub-check-rows"></tbody>
+            </table>
+        </div>
     </div>
 
     {% js %}
