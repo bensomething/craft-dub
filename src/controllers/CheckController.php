@@ -18,19 +18,39 @@ use yii\web\Response;
  * Backs the Dub Links utility, which is the `dub/check` command with a screen in front of it.
  *
  * @phpstan-import-type CheckResult from DubService
+ * @phpstan-import-type CheckSummary from DubService
  * @phpstan-type Finding array{key: string, status: string, outcome: string|null, detail: string, outcomeDetail: string, shortLink: string|null, entryId: int, siteId: int}
  */
 class CheckController extends Controller
 {
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * How many links one request works through.
+     *
+     * A check is one Dub request per link, in series, so the only thing that decides how long
+     * a request runs is how many links it is given. Twenty five of them is a few seconds even
+     * on a slow day, which is comfortably inside every proxy timeout worth naming, and the
+     * screen loops until the workspace is done. The alternative, a single request sized by the
+     * workspace, is the one that gets cut off, and a repair cut off halfway is silent about
+     * which half it finished.
+     */
+    private const BATCH_SIZE = 25;
+
     // Public Methods
     // =========================================================================
 
     /**
-     * Checks every recorded link against Dub and returns the findings as rendered HTML.
+     * Checks one slice of the recorded links and returns its rows as rendered HTML.
      *
      * The work is the service's, exactly as the console command calls it, so the two surfaces
      * cannot report different things. What's added here is the naming: a row gets its entry's
      * title and a link to it, rather than the `entry 41, site 2` the terminal has to settle for.
+     *
+     * One request is one slice. The screen calls this until `done`, carrying the running totals
+     * with it, and renders each slice's rows as they land. That is what keeps the findings so
+     * far on screen if a later slice fails, rather than losing the lot to one timeout.
      *
      * @throws \yii\web\BadRequestHttpException
      * @throws \yii\web\ForbiddenHttpException
@@ -54,16 +74,16 @@ class CheckController extends Controller
             $this->requirePermission(Plugin::PERMISSION_MANAGE_LINKS);
         }
 
-        // One Dub request per recorded link, in series. A workspace of any size will outrun the
-        // default execution time, and this is the same allowance Craft gives its own long CP
-        // operations. The console command remains the answer for a workspace large enough to
-        // outrun the browser as well.
+        $offset = max(0, (int)$this->request->getBodyParam('offset', 0));
+
+        // A slice is sized to finish well inside any timeout, but PHP's own limit is per
+        // request and knows nothing about that, so it still gets lifted.
         App::maxPowerCaptain();
 
         /** @var list<Finding> $rows */
         $rows = [];
 
-        $summary = Plugin::getInstance()->dub->checkLinks($fix, function(string $status, array $result) use (&$rows): void {
+        $batch = Plugin::getInstance()->dub->checkLinks($fix, function(string $status, array $result) use (&$rows): void {
             /** @var CheckResult $result */
             $record = $result['record'];
 
@@ -79,21 +99,107 @@ class CheckController extends Controller
                 'entryId' => (int)$record->entryId,
                 'siteId' => (int)$record->siteId,
             ]);
-        });
+        }, $offset, self::BATCH_SIZE);
+
+        // The slice's own counts, folded into what the screen has carried so far. Totals come
+        // back off the request rather than being held server-side: they are nine integers that
+        // are only ever shown back to the person who sent them, so a session or a cache entry
+        // would be state to expire for no gain.
+        $totals = self::mergeTotals(self::postedTotals($this->request->getBodyParam('totals')), $batch);
+
+        // A short slice means the table ran out, which is the only reliable end signal. Reading
+        // it off a count taken now would race with anything saved during the run.
+        $done = $batch['error'] !== null || $batch['checked'] < self::BATCH_SIZE;
 
         return $this->asJson([
-            'html' => $this->getView()->renderTemplate('dub/_check-results.twig', [
+            'rowsHtml' => $this->getView()->renderTemplate('dub/_check-rows.twig', [
                 'rows' => $this->nameRows($rows),
-                'summary' => $summary,
-                'fix' => $fix,
-                'canRepair' => Plugin::canManageLinks(),
                 'showSite' => Craft::$app->getIsMultiSite(),
             ]),
+            'summaryHtml' => $done
+                ? $this->getView()->renderTemplate('dub/_check-summary.twig', [
+                    'summary' => $totals,
+                    'fix' => $fix,
+                    'canRepair' => Plugin::canManageLinks(),
+                ])
+                : null,
+            'totals' => $totals,
+            'checked' => $totals['checked'],
+            'total' => Plugin::getInstance()->dub->countLinks(),
+            'nextOffset' => $offset + self::BATCH_SIZE,
+            'done' => $done,
         ]);
     }
 
     // Private Methods
     // =========================================================================
+
+    /**
+     * The running totals the screen carried into this request, reduced to what they are allowed
+     * to be.
+     *
+     * Only the known counters survive, each cast to a non-negative integer, so a hand-written
+     * request cannot put anything into the summary but wrong arithmetic about its own run. The
+     * error field is deliberately dropped: it belongs to whichever slice actually failed.
+     *
+     * @return CheckSummary
+     */
+    private static function postedTotals(mixed $posted): array
+    {
+        $totals = self::emptyTotals();
+
+        if (!is_array($posted)) {
+            return $totals;
+        }
+
+        foreach ($totals as $key => $value) {
+            if ($key !== 'error' && isset($posted[$key])) {
+                $totals[$key] = max(0, (int)$posted[$key]);
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Adds a slice's counts to the running totals.
+     *
+     * @param CheckSummary $totals
+     * @param CheckSummary $batch
+     * @return CheckSummary
+     */
+    private static function mergeTotals(array $totals, array $batch): array
+    {
+        foreach ($totals as $key => $value) {
+            if ($key !== 'error') {
+                $totals[$key] = $value + $batch[$key];
+            }
+        }
+
+        // The first failure wins. A later slice failing for a second reason doesn't make the
+        // first one untrue, and only one line is shown.
+        $totals['error'] = $totals['error'] ?? $batch['error'];
+
+        return $totals;
+    }
+
+    /**
+     * @return CheckSummary
+     */
+    private static function emptyTotals(): array
+    {
+        return [
+            'checked' => 0,
+            'ok' => 0,
+            'missing' => 0,
+            'drifted' => 0,
+            'stale' => 0,
+            'unreadable' => 0,
+            'repaired' => 0,
+            'unrepaired' => 0,
+            'error' => null,
+        ];
+    }
 
     /**
      * Adds one result to the findings, folding a repair outcome into the row that found it.

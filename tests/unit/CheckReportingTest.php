@@ -188,6 +188,101 @@ class CheckReportingTest extends TestCase
         $this->assertStringNotContainsString('<b>', $html);
     }
 
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function summary(array $overrides = []): array
+    {
+        $method = new ReflectionMethod(WebCheckController::class, 'emptyTotals');
+        $method->setAccessible(true);
+
+        return array_merge($method->invoke(null), $overrides);
+    }
+
+    /**
+     * @param array<string, mixed> $totals
+     * @param array<string, mixed> $batch
+     * @return array<string, mixed>
+     */
+    private function merge(array $totals, array $batch): array
+    {
+        $method = new ReflectionMethod(WebCheckController::class, 'mergeTotals');
+        $method->setAccessible(true);
+
+        return $method->invoke(null, $totals, $batch);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function posted(mixed $value): array
+    {
+        $method = new ReflectionMethod(WebCheckController::class, 'postedTotals');
+        $method->setAccessible(true);
+
+        return $method->invoke(null, $value);
+    }
+
+    public function testSliceCountsAddUpAcrossARun(): void
+    {
+        $totals = $this->merge(
+            $this->summary(['checked' => 25, 'ok' => 24, 'drifted' => 1]),
+            $this->summary(['checked' => 25, 'ok' => 23, 'missing' => 2, 'repaired' => 2]),
+        );
+
+        $this->assertSame(50, $totals['checked']);
+        $this->assertSame(47, $totals['ok']);
+        $this->assertSame(1, $totals['drifted']);
+        $this->assertSame(2, $totals['missing']);
+        $this->assertSame(2, $totals['repaired']);
+    }
+
+    public function testTheFirstSliceToFailOwnsTheError(): void
+    {
+        // A later slice failing for a second reason doesn't make the first one untrue, and only
+        // one line is shown.
+        $totals = $this->merge(
+            $this->summary(['error' => 'No Dub API key configured.']),
+            $this->summary(['error' => 'Something else went wrong.']),
+        );
+
+        $this->assertSame('No Dub API key configured.', $totals['error']);
+    }
+
+    public function testAnErrorFromALaterSliceIsStillReported(): void
+    {
+        $totals = $this->merge($this->summary(['checked' => 25]), $this->summary(['error' => 'Gateway timeout.']));
+
+        $this->assertSame('Gateway timeout.', $totals['error']);
+    }
+
+    public function testPostedTotalsAreReducedToNonNegativeCounters(): void
+    {
+        // The running totals come back off the request, so a hand-written one must not be able
+        // to put anything into the summary but wrong arithmetic about its own run.
+        $totals = $this->posted([
+            'checked' => '25',
+            'ok' => -5,
+            'missing' => '3 links',
+            'somethingElse' => 99,
+            'error' => 'injected',
+        ]);
+
+        $this->assertSame(25, $totals['checked'], 'a numeric string is a count');
+        $this->assertSame(0, $totals['ok'], 'a negative count is clamped');
+        $this->assertSame(3, $totals['missing'], 'a junk string casts to its leading digits');
+        $this->assertArrayNotHasKey('somethingElse', $totals, 'unknown keys are dropped');
+        $this->assertNull($totals['error'], 'the error belongs to the slice that failed, not the caller');
+    }
+
+    public function testAFirstRequestWithNoTotalsStartsFromZero(): void
+    {
+        foreach ([null, 'nonsense', []] as $posted) {
+            $this->assertSame($this->summary(), $this->posted($posted));
+        }
+    }
+
     public function testTheUtilityIconResolvesToAFileThatExists(): void
     {
         // Cp::iconSvg() swallows a bad path, logs a warning and returns an empty string, and

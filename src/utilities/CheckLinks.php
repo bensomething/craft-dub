@@ -78,6 +78,9 @@ class CheckLinks extends Utility
             // The repair path writes to Dub, so it's offered on the same permission that lets
             // someone rename a link from an entry. Without it the screen still reports.
             'canRepair' => Plugin::canManageLinks(),
+            // The table is rendered empty up front and filled a slice at a time, so its heading
+            // row has to know about the site column before the first slice lands.
+            'showSite' => Craft::$app->getIsMultiSite(),
         ]);
     }
 }

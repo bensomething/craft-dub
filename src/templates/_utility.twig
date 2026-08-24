@@ -60,16 +60,83 @@
         <div id="dub-check-spinner" class="spinner hidden"></div>
     </div>
 
-    <div id="dub-check-results"></div>
+    <div id="dub-check-results">
+        <p id="dub-check-progress" class="hidden"></p>
+
+        {# Opened empty and filled a slice at a time, so findings from the slices that did land
+           stay on screen if a later one fails. #}
+        <table id="dub-check-table" class="data fullwidth hidden">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Status' | t('dub') }}</th>
+                    <th scope="col">{{ 'Entry' | t('dub') }}</th>
+                    {% if showSite %}<th scope="col">{{ 'Site' | t('dub') }}</th>{% endif %}
+                    <th scope="col">{{ 'Short link' | t('dub') }}</th>
+                    <th scope="col">{{ 'Detail' | t('dub') }}</th>
+                </tr>
+            </thead>
+            <tbody id="dub-check-rows"></tbody>
+        </table>
+
+        <div id="dub-check-summary"></div>
+    </div>
 
     {% js %}
         (function() {
             var $buttons = $('.dub-check-btn');
             var $buttonRow = $('.dub-buttons');
             var $spinner = $('#dub-check-spinner');
-            var $results = $('#dub-check-results');
+            var $progress = $('#dub-check-progress');
+            var $table = $('#dub-check-table');
+            var $rows = $('#dub-check-rows');
+            var $summary = $('#dub-check-summary');
+
             var confirmRepair = {{ 'Recreate deleted links and re-point edited ones to match Craft?' | t('dub') | json_encode | raw }};
             var failed = {{ 'The check could not be run.' | t('dub') | json_encode | raw }};
+            {# Substituted here rather than server side: the numbers change on every slice, and
+               a round trip per number to have Craft do the replacing would be absurd. Craft::t()
+               leaves the placeholders alone when it is given no parameters. #}
+            var progressText = {{ 'Checked {checked} of {total}.' | t('dub') | json_encode | raw }};
+
+            {# The buttons keep their bottom margin only while something sits under them. #}
+            function syncSpacing() {
+                var hasContent = $rows.children().length > 0
+                    || $.trim($summary.html()).length > 0
+                    || !$progress.hasClass('hidden');
+
+                $buttonRow.toggleClass('dub-no-results', !hasContent);
+            }
+
+            function runSlice(fix, offset, totals) {
+                var data = { fix: fix ? 1 : 0, offset: offset };
+                if (totals) {
+                    data.totals = totals;
+                }
+
+                return Craft.sendActionRequest('POST', 'dub/check/run', { data: data })
+                    .then(function(response) {
+                        var result = response.data;
+
+                        $rows.append(result.rowsHtml);
+                        if ($rows.children().length) {
+                            $table.removeClass('hidden');
+                        }
+
+                        $progress.text(progressText
+                            .replace('{checked}', result.checked)
+                            .replace('{total}', result.total));
+                        syncSpacing();
+
+                        if (result.done) {
+                            $summary.html(result.summaryHtml);
+                            $progress.addClass('hidden');
+                            syncSpacing();
+                            return;
+                        }
+
+                        return runSlice(fix, result.nextOffset, result.totals);
+                    });
+            }
 
             $buttons.on('click', function(ev) {
                 ev.preventDefault();
@@ -81,16 +148,19 @@
 
                 $buttons.addClass('disabled').attr('disabled', true);
                 $spinner.removeClass('hidden');
-                $results.html('');
-                $buttonRow.addClass('dub-no-results');
+                $rows.empty();
+                $summary.empty();
+                $table.addClass('hidden');
+                $progress.removeClass('hidden').text('');
+                syncSpacing();
 
-                Craft.sendActionRequest('POST', 'dub/check/run', { data: { fix: fix ? 1 : 0 } })
-                    .then(function(response) {
-                        $results.html(response.data.html);
-                        $buttonRow.removeClass('dub-no-results');
-                    })
+                runSlice(fix, 0, null)
                     .catch(function(e) {
+                        {# Whatever landed before the failure stays on screen. That is the whole
+                           point of slicing: a run that stops halfway says where it got to. #}
                         Craft.cp.displayError((e && e.response && e.response.data && e.response.data.message) || failed);
+                        $progress.addClass('hidden');
+                        syncSpacing();
                     })
                     .then(function() {
                         $spinner.addClass('hidden');

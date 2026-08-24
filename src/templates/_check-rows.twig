@@ -1,0 +1,37 @@
+{# @var rows array #}
+{# @var showSite bool #}
+
+{# One slice's rows, appended to a table the utility screen already has open. No wrapper and no
+   whitespace of its own, since this lands inside a tbody. #}
+{%- for row in rows -%}
+    <tr>
+        <td>
+            {# Found and, when a repair ran, done: two pills in one cell rather than two rows
+               naming the same link. #}
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                {{ row.statusHtml | raw }}
+                {{ row.outcomeHtml | raw }}
+            </div>
+        </td>
+        <td>
+            {%- if row.url -%}
+                <a href="{{ row.url }}">{{ row.title }}</a>
+            {%- else -%}
+                {{ row.title }}
+            {%- endif -%}
+        </td>
+        {% if showSite %}<td>{{ row.site }}</td>{% endif %}
+        <td>
+            {%- if row.shortLink -%}
+                <a href="{{ row.shortLink }}" target="_blank" rel="noopener">{{ row.shortLink | replace('https://', '') }}</a>
+            {%- endif -%}
+        </td>
+        <td>
+            {{ row.detailHtml | raw }}
+            {# Only a repair that didn't take has anything to add. #}
+            {% if row.outcomeDetailHtml %}
+                <div>{{ row.outcomeDetailHtml | raw }}</div>
+            {% endif %}
+        </td>
+    </tr>
+{%- endfor -%}

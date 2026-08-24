@@ -169,8 +169,9 @@ The same check has a screen at **Utilities → Dub Links**, for the people who l
 but have no terminal. It reports the same three findings, with each one named after its entry and
 linked to it, and **Repair links** does what `--fix` does.
 
-Every recorded link is one request to Dub, made in series, so a large workspace is still better
-checked from the command line.
+It works through the links in batches, reporting each batch as it lands and counting up as it
+goes, so a large workspace takes a while rather than running out of time. A run that does fail
+partway leaves what it already found on screen.
 
 ## Permissions
 

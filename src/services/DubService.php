@@ -776,10 +776,16 @@ class DubService extends Component
      * `label — detail`, while the utility screen builds a row from the record and shows only
      * the detail beside it. Composing here would leave the CP unpicking a string.
      *
+     * Takes an offset and a limit so a caller with a request timeout over its head can work
+     * through a workspace a slice at a time. The console passes neither and gets one pass, as
+     * it always did. The ordering is a total order over (entryId, siteId), so the slices are
+     * stable and disjoint; a link created by a save mid-run can shift rows by one, which for a
+     * report is worth less than the machinery to prevent it.
+     *
      * @param callable(string, CheckResult): void|null $onResult
      * @return CheckSummary
      */
-    public function checkLinks(bool $fix = false, ?callable $onResult = null): array
+    public function checkLinks(bool $fix = false, ?callable $onResult = null, int $offset = 0, ?int $limit = null): array
     {
         // Detections (ok/missing/drifted/unreadable) are mutually exclusive and sum to
         // `checked`. Outcomes (repaired/unrepaired) are a subset of missing + drifted, and only
@@ -801,8 +807,14 @@ class DubService extends Component
             return $summary;
         }
 
+        $records = DubLink::find()
+            ->orderBy(['entryId' => SORT_ASC, 'siteId' => SORT_ASC])
+            ->offset($offset)
+            ->limit($limit)
+            ->all();
+
         /** @var DubLink $record */
-        foreach (DubLink::find()->orderBy(['entryId' => SORT_ASC, 'siteId' => SORT_ASC])->all() as $record) {
+        foreach ($records as $record) {
             $label = $this->labelFor($record);
 
             $remote = $record->dubLinkId
@@ -855,6 +867,14 @@ class DubService extends Component
         }
 
         return $summary;
+    }
+
+    /**
+     * How many links are recorded, which is how many requests a full check will make.
+     */
+    public function countLinks(): int
+    {
+        return (int)DubLink::find()->count();
     }
 
     /**
