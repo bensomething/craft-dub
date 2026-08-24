@@ -807,6 +807,23 @@ class DubService extends Component
             return $summary;
         }
 
+        // One authenticated call before walking the table, because a refused key is
+        // indistinguishable from a deleted link at the level this reads them: Dub answers
+        // /links/info with a 404 rather than a 401, makeRequest() treats a 404 as "not there"
+        // and returns null without recording an error, and classifyRemote() has nothing left to
+        // tell the two apart. So a wrong, expired or revoked key reported every link in the
+        // install as gone from Dub, which is the worst thing this command could say: it reads
+        // as the links having been destroyed when they are fine, and it invites a --fix that
+        // would try to recreate every one of them.
+        //
+        // /domains is the same call the settings screen makes. A workspace with no domains
+        // answers with an empty array, which is not null, so only a refusal stops the run.
+        if ($this->makeRequest('GET', '/domains') === null) {
+            $summary['error'] = 'The Dub API key was refused, so no links were checked.'
+                . ($this->lastError !== null ? ' ' . $this->lastError : '');
+            return $summary;
+        }
+
         $records = DubLink::find()
             ->orderBy(['entryId' => SORT_ASC, 'siteId' => SORT_ASC])
             ->offset($offset)

@@ -15,6 +15,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 use ReflectionMethod;
+use yii\base\InvalidConfigException;
 
 class DubServiceTest extends TestCase
 {
@@ -658,5 +659,62 @@ class DubServiceTest extends TestCase
             'no recorded destination' => [$remote, false, $short, null, 'ok'],
             'no recorded short link' => [$remote, false, null, $url, 'ok'],
         ];
+    }
+    // Refused API keys
+    // =========================================================================
+
+    public function testCheckLinksStopsWhenTheApiKeyIsRefused(): void
+    {
+        // Dub answers /links/info with a 404 when the key is refused rather than a 401, and a
+        // 404 is exactly how a genuinely deleted link looks. Without the probe, a wrong key
+        // reported every link in the install as gone from Dub, which reads as the links having
+        // been destroyed when they are fine.
+        $service = $this->stub([new Response(404, [], '{}')]);
+
+        $summary = $service->checkLinks();
+
+        $this->assertSame(['/domains'], $this->sentPaths(), 'the run stops at the probe');
+        $this->assertSame(0, $summary['checked'], 'no link is looked at');
+        $this->assertSame(0, $summary['missing'], 'and none is called missing');
+        $this->assertStringContainsString('refused', (string)$summary['error']);
+    }
+
+    public function testARefusalCarriesDubsOwnReason(): void
+    {
+        $service = $this->stub([new Response(401, [], '{"error":{"message":"Unauthorized"}}')]);
+
+        $summary = $service->checkLinks();
+
+        $this->assertStringContainsString('Unauthorized', (string)$summary['error']);
+    }
+
+    public function testAWorkspaceWithNoDomainsIsNotTreatedAsARefusal(): void
+    {
+        // An empty array is a successful answer, and only null is a refusal. Reading "no
+        // domains" as "bad key" would stop the check on a workspace that is merely new.
+        //
+        // Proven by where it fails rather than by what it returns: past the probe, the next
+        // thing checkLinks() touches is the record table, and this suite has no database. That
+        // exception is the assertion. Anything that returned a summary here would mean the
+        // probe had stopped the run.
+        $service = $this->stub([new Response(200, [], '[]')]);
+
+        try {
+            $service->checkLinks();
+            $this->fail('expected the run to continue as far as the record layer');
+        } catch (InvalidConfigException $e) {
+            $this->assertSame(['/domains'], $this->sentPaths(), 'only the probe was sent');
+        }
+    }
+
+    public function testNoKeyAtAllStopsBeforeAnyRequest(): void
+    {
+        $service = $this->stub();
+        $service->stubApiKey = null;
+
+        $summary = $service->checkLinks();
+
+        $this->assertSame([], $this->sentPaths(), 'nothing is sent without a key');
+        $this->assertStringContainsString('No Dub API key', (string)$summary['error']);
     }
 }
