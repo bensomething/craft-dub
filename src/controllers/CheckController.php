@@ -117,8 +117,17 @@ class CheckController extends Controller
                 'rows' => $this->nameRows($rows),
                 'showSite' => Craft::$app->getIsMultiSite(),
             ]),
-            'summaryHtml' => $done
-                ? $this->getView()->renderTemplate('dub/_check-summary.twig', [
+            // Rendered apart because they land in different places: the outcome goes in the
+            // button row, in place of the progress bar, and what to do about it goes above the
+            // table it refers to. Both only exist once the last slice is in.
+            'resultHtml' => $done
+                ? $this->getView()->renderTemplate('dub/_check-result.twig', [
+                    'summary' => $totals,
+                    'fix' => $fix,
+                ])
+                : null,
+            'fixHtml' => $done
+                ? $this->getView()->renderTemplate('dub/_check-fix.twig', [
                     'summary' => $totals,
                     'fix' => $fix,
                     'canRepair' => Plugin::canManageLinks(),

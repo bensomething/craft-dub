@@ -50,41 +50,38 @@
        the collapsed margin applied after the container filled, and moving the gap onto
        `#dub-check-results > :first-child` never landed on the injected first child at all. A
        class on the element whose margin is in question has nothing to get wrong. #}
+
     {# Widest the count can get: both numbers at their full digit count, plus the ' / '
-       between them. Reserved up front so the bar starts in the same place at 0 of 9 as it
-       does at 9 of 9, rather than being nudged along as the numbers grow. #}
+       between them. #}
     {% set countWidth = ((linkCount ~ '') | length * 2) + 3 %}
 
     <style>
         .dub-buttons.dub-no-results { margin-block-end: 0 }
 
+        /* The progress bar and the result share one slot at the end of the button row, one of
+           them showing at a time, so the run's state reads as the state of the buttons that
+           started it. Set off from them by the same space the pane sets them off from its own
+           edge: `var(--padding)` is the pane's own value, and `.buttons` already contributes
+           its 7px gap, so only the remainder is added. */
+        .dub-row-end { flex: 1; margin-inline-start: calc(var(--padding) - 7px) }
+
         /* Craft's progress bar is absolutely positioned across the middle 60% of whatever it
            is measured against, which is right for a bar that overlays a pane and wrong for one
            sitting in a row of buttons. Laid out in the flow instead, filling what the buttons
            leave. The count is ordered ahead of the bar so it stays beside them rather than
-           being pushed to the far edge by a bar that grows. */
-        /* Set off from the buttons by the same space the pane sets them off from its own
-           edge. `var(--padding)` is what the pane itself uses, so it stays right if that
-           token changes or shifts at another breakpoint. `.buttons` already contributes its
-           own 7px gap, so only the remainder is added here. */
-        #dub-check-progress { display: flex; align-items: center; flex: 1; gap: 10px;
-            margin-inline-start: calc(var(--padding) - 7px) }
+           being pushed to the far edge by a bar that grows, its width reserved up front so the
+           bar starts in the same place at 0 of 9 as at 9 of 9, and its figures tabular so it
+           doesn't twitch between digits of unequal width either. */
+        #dub-check-progress { display: flex; align-items: center; gap: 10px }
         #dub-check-progress .progressbar { position: static; width: auto; flex: 1; margin: 0 }
-
-        /* The summary's divider sits two levels inside the pane, so Craft's own
-           `.content-pane > hr` rule doesn't reach it. Only the bleed is restated: its block
-           margin is Craft's `--hr-margin`, the same one every other rule in the control panel
-           gets, and left alone it is right. Overriding it was what went wrong twice.
-
-           The table's own bottom margin stays as a floor under that. Adjacent margins collapse
-           to the larger of the two, so it cannot add to the gap, only stop it closing if that
-           token ever shrinks. */
-        #dub-check-table { margin-block-end: var(--pane-padding) }
-        #dub-check-summary hr { margin-inline: calc(var(--pane-padding) * -1) }
-        /* Tabular figures as well as the reserved width: without them the count still
-           twitches between digits of unequal width at the same digit count. */
         #dub-check-progress .progressbar-status { order: -1; white-space: nowrap;
             font-variant-numeric: tabular-nums; min-width: {{ countWidth }}ch }
+
+        /* The remedies sit between the buttons and the table they refer to. Their own
+           paragraph margins carry the spacing, minus the first one's, which would otherwise
+           double up with the button row's. The block is hidden outright when there is nothing
+           to say, so an empty one takes no room. */
+        #dub-check-fix p:first-child { margin-block-start: 0 }
     </style>
 
     <div class="buttons dub-buttons dub-no-results">
@@ -95,12 +92,16 @@
             <button type="button" class="btn dub-check-btn" data-fix="1">{{ 'Repair links' | t('dub') }}</button>
         {% endif %}
 
-        {# Craft.ProgressBar fills this. Inside the button row, so the count and the bar read as
-           the state of the buttons beside them rather than as the first of the results. #}
-        <div id="dub-check-progress" class="hidden"></div>
+        {# Craft.ProgressBar fills this while the run is on. When it finishes, the result
+           takes the same slot. #}
+        <div id="dub-check-progress" class="dub-row-end hidden"></div>
+        <div id="dub-check-result" class="dub-row-end hidden"></div>
     </div>
 
     <div id="dub-check-results">
+        {# What to do about the findings, above the findings themselves. #}
+        <div id="dub-check-fix" class="hidden"></div>
+
         {# Opened empty and filled a slice at a time, so findings from the slices that did land
            stay on screen if a later one fails. #}
         <table id="dub-check-table" class="data fullwidth hidden">
@@ -115,8 +116,6 @@
             </thead>
             <tbody id="dub-check-rows"></tbody>
         </table>
-
-        <div id="dub-check-summary"></div>
     </div>
 
     {% js %}
@@ -124,9 +123,10 @@
             var $buttons = $('.dub-check-btn');
             var $buttonRow = $('.dub-buttons');
             var $progress = $('#dub-check-progress');
+            var $result = $('#dub-check-result');
+            var $fix = $('#dub-check-fix');
             var $table = $('#dub-check-table');
             var $rows = $('#dub-check-rows');
-            var $summary = $('#dub-check-summary');
 
             var confirmRepair = {{ 'Recreate deleted links and re-point edited ones to match Craft?' | t('dub') | json_encode | raw }};
             var failed = {{ 'The check could not be run.' | t('dub') | json_encode | raw }};
@@ -142,13 +142,19 @@
                 $progress.addClass('hidden');
             }
 
-            {# The buttons keep their bottom margin only while something sits under them. The
-               progress bar doesn't count: it sits in the button row itself. #}
+            {# The buttons keep their bottom margin only while something sits under them.
+               Neither the bar nor the result counts: both sit in the button row itself. #}
             function syncSpacing() {
-                var hasContent = $rows.children().length > 0
-                    || $.trim($summary.html()).length > 0;
+                var hasContent = $rows.children().length > 0 || !$fix.hasClass('hidden');
 
                 $buttonRow.toggleClass('dub-no-results', !hasContent);
+            }
+
+            {# Empty is the normal case for the remedies, so the block is hidden rather than
+               left standing with nothing in it. #}
+            function fill($el, html) {
+                $el.html(html || '');
+                $el.toggleClass('hidden', $.trim(html || '').length === 0);
             }
 
             function runSlice(fix, offset, totals) {
@@ -175,8 +181,9 @@
                         syncSpacing();
 
                         if (result.done) {
-                            $summary.html(result.summaryHtml);
                             stopProgress();
+                            fill($result, result.resultHtml);
+                            fill($fix, result.fixHtml);
                             syncSpacing();
                             return;
                         }
@@ -195,7 +202,8 @@
 
                 $buttons.addClass('disabled').attr('disabled', true);
                 $rows.empty();
-                $summary.empty();
+                fill($result, '');
+                fill($fix, '');
                 $table.addClass('hidden');
 
                 {# resetProgressBar() puts the count back to 1 of 0, so the real total goes on

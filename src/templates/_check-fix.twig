@@ -1,0 +1,43 @@
+{# @var summary array #}
+{# @var fix bool #}
+{# @var canRepair bool #}
+{# @var settingsUrl string #}
+
+{# What to do about what was found, sat above the table it refers to. Every line is
+   conditional and the whole block can come out empty: a user without the repair permission is
+   not going to be told to press a button they cannot see, and a repair that fixed everything
+   leaves nothing to say. The screen hides the block when this renders blank. #}
+
+{%- if not fix and canRepair and (summary.missing or summary.drifted) -%}
+    {# The button's name is passed in rather than bolded around a split string, so a translator
+       still gets a whole sentence to work with. #}
+    <p>{{ 'Use {button} to recreate the missing links and reconcile the drifted ones.' | t('dub', {
+        button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
+    }) | raw }}</p>
+{%- endif -%}
+
+{%- if summary.unrepaired -%}
+    {# The reason sits in the row, since it is per link and often different each time. What
+       belongs here is only what to do once it has been read. #}
+    <p>{{ 'Repairs that did not take give their reason below. Put that right at Dub, then run {button} again.' | t('dub', {
+        button: '<strong>' ~ ('Repair links' | t('dub')) ~ '</strong>',
+    }) | raw }}</p>
+{%- endif -%}
+
+{%- if summary.stale -%}
+    {# Not repaired here on purpose: a link only moves when its entry is saved, and
+       reimplementing that move would be a second place deciding what a link looks like. #}
+    {# The command is passed in rather than left in the string: it is a literal, not something
+       to translate, and the full stop stays outside the code element. #}
+    <p>{{ 'Stale links move when their entries are next saved. Save the entries listed below, or run {command}.' | t('dub', {
+        command: '<code>php craft resave/entries</code>',
+    }) | raw }}</p>
+{%- endif -%}
+
+{%- if summary.unreadable -%}
+    {# Unreadable is the API failing rather than anything being wrong with the link, so the
+       remedy is about the connection, not the entry. #}
+    <p>{{ 'Links that could not be read give their reason below. Run the connection test on the {link} to check the API key and the workspace.' | t('dub', {
+        link: '<a href="' ~ settingsUrl ~ '">' ~ ('settings screen' | t('dub')) ~ '</a>',
+    }) | raw }}</p>
+{%- endif -%}
